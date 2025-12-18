@@ -288,7 +288,7 @@ end
 function energy(sys::ParticleSystem)::Float64
         E = 0.0
         for p in sys.particles
-                E += 0.5 * p.rho * p.v^2 + p.rho * g * p.x[2]
+		E += 0.5 * p.ρ * dot(p.v,p.v) + p.ρ * g * p.x[2]
         end
         return E
 end
@@ -303,10 +303,9 @@ function main()
         # save the parameters as a dictionary for future analysis
         params = @dict(
                 dom_height, dom_length, dr, bc_width,
-                hₘ, a, η, h0,
-                ρ0, m0, c, ν, ε, α, β,
+                hₘ, a,  h0,
+                c, 
                 γᵣ, zᵦ, zₜ,
-                T_bg,
                 dt, t_end, dt_frame
         )
         sys = make_system()

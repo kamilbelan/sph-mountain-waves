@@ -372,7 +372,7 @@ end
 function energy(sys::ParticleSystem)::Float64
         E = 0.0
         for p in sys.particles
-                E += 0.5 * p.rho * p.v^2 + p.rho * g * p.x[2]
+		E += 0.5 * p.ρ * dot(p.v,p.v) + p.ρ * g * p.x[2]
         end
         return E
 end
