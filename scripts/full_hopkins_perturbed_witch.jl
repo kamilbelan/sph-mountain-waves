@@ -81,7 +81,7 @@ const rho_floor = 1e-6
 const P_floor = 1e-10
 
 
-include(scriptsdir("utils", "new_packing.jl"))
+include(srcdir("utils", "new_packing.jl"))
 # ==============
 # Particle type
 # ==============
