@@ -30,7 +30,7 @@ Declare constants
 #geometry parameters
 const dom_height = 26e3   #height of the domain 
 const dom_length = 400e3  #length of the domain
-const dr = dom_height / 75  #average particle distance (decrease to make finer simulation)
+const dr = dom_height / 50  #average particle distance (decrease to make finer simulation)
 const h0 = 1.8 * dr          #smoothing length    
 const bc_width = 6 * dr     #boundary width
 const hₘ = 0#100            #parameters for the Witch of Agnesi profile; mountain height
@@ -41,6 +41,10 @@ const ρ0 = 1.393 #referential fluid density
 const mu = 1.0# 15.98e-6 #dynamic viscosity
 const c = sqrt(65e3 * (7 / 5) / ρ0) #speed of sound
 const nu = 0.1 * h0 * c
+
+# numerical safety floors
+const rho_floor = 1e-6
+const P_floor = 1e-10
 
 #meteorological parameters
 const N = sqrt(0.0196)     #Brunt-Vaisala frequency
@@ -59,7 +63,7 @@ const T0 = 250 #initial temperature
 
 #temporal parameters
 const dt = 0.01 * h0 / c   #time step
-const t_end = 20 #end of simulation
+const t_end = 2.0 #end of simulation
 const dt_frame = t_end / 100 #how often data is saved
 
 #particle types
@@ -158,7 +162,8 @@ end
 
 @inbounds function set_pressure!(p::Particle)
         if p.type == FLUID
-                p.P = R_mass * p.ρ * p.T
+                pP = R_mass * p.ρ * p.T
+		p.P = max(pP, P_floor)
         end
 end
 
@@ -191,6 +196,7 @@ end
 @inbounds function update_density!(p::Particle)
         if p.type == FLUID
                 p.ρ += dt * p.Dρ
+		p.ρ = max(p.ρ, rho_floor)
         end
         p.Dρ = 0.0
 end
@@ -286,7 +292,7 @@ end
 function energy(sys::ParticleSystem)::Float64
         E = 0.0
         for p in sys.particles
-		E += 0.5 * p.ρ * dot(p.v,p.v) + p.ρ * g * p.x[2]
+		E += 0.5 * p.ρ * dot(p.u,p.u) + p.ρ * g * p.x[2]
         end
         return E
 end
@@ -370,7 +376,7 @@ function main()
                                 t, frame_counter,
                                 n_particles=length(sys.particles),
                                 positions=[p.x for p in sys.particles],
-                                velocities=[p.v for p in sys.particles],
+                                velocities=[p.u for p in sys.particles],
                                 densities=[p.ρ for p in sys.particles],
                                 pressures=[p.P for p in sys.particles],
                                 temperatures=[p.T for p in sys.particles],

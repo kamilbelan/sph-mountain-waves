@@ -29,7 +29,7 @@ using CSV
 # geometry parameters
 const dom_height = 26e3        # height of the domain
 const dom_length = 400e3       # length of the domain
-const dr = dom_height / 75     # average particle distance
+const dr = dom_height / 50     # average particle distance
 const bc_width = 6 * dr        # boundary width
 const hₘ = 0.0                 # Witch of Agnesi: mountain height
 const a = 0.0                  # Witch of Agnesi: mountain width
@@ -67,7 +67,7 @@ const T_bg = 250.0               # background (ie. initial) temperature
 
 # temporal parameters
 const dt = 0.01 * h0 / c       # time step
-const t_end = 20.0              # end of simulation
+const t_end = 2.0              # end of simulation
 const dt_frame = t_end / 100   # frame interval
 
 # particle types
