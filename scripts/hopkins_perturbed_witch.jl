@@ -475,7 +475,7 @@ function main()
                 end
         end
 
-        save_pvd_file(out)
+        #save_pvd_file(out)
 
         p1 = plot(
                 average_velocities.t, average_velocities.u;

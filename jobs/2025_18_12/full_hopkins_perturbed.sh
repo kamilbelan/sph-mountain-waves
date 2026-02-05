@@ -1,7 +1,7 @@
 #!/bin/bash -l
-#SBATCH --job-name=cylinder_classical_sph_job
-#SBATCH --output=cylinder_classical_sph.%j.out
-#SBATCH --error=cylinder_classical_sph.%j.err
+#SBATCH --job-name=full_hopkins_pert
+#SBATCH --output=full)_hopkins_pert.%j.out
+#SBATCH --error=full_hopkins_pert.%j.err
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -21,9 +21,9 @@ export JULIA_NUM_THREADS=$SLURM_CPUS_PER_TASK
 echo "Running on $(hostname) with $JULIA_NUM_THREADS threads"
 echo "Julia binary: $(which julia)"
 
-# cd /path/to/your/julia/project
+cd /usr/users/belank/sph-mountain-waves/jobs/2025_18_12
 
-julia -t $JULIA_NUM_THREADS job_classical.jl
+julia -t $JULIA_NUM_THREADS full_hopkins_perturbed.jl
 
 echo "=== JOB END $(date) ==="
 

@@ -21,7 +21,7 @@ using CSV
 
 # UNCOMMENT IF ONE WISHES TO SAVE FRAMES FOR PARAVIEW
 #const folder_name = "pavelka_total_witch"
-#const export_vars = (:u, :rho, :P, :θ, :T, :type)
+#const export_vars = (:u, :ρ, :P, :θ, :T, :type)
 
 #=
 Declare constants
@@ -37,9 +37,9 @@ const hₘ = 0#100            #parameters for the Witch of Agnesi profile; mount
 const a = 0#10e3            #parameters for the Witch of Agnesi profile; mountain width
 
 #physical parameters
-const rho0 = 1.393 #referential fluid density
+const ρ0 = 1.393 #referential fluid density
 const mu = 1.0# 15.98e-6 #dynamic viscosity
-const c = sqrt(65e3 * (7 / 5) / rho0) #speed of sound
+const c = sqrt(65e3 * (7 / 5) / ρ0) #speed of sound
 const nu = 0.1 * h0 * c
 
 #meteorological parameters
@@ -79,24 +79,23 @@ mutable struct Particle <: AbstractParticle
         m::Float64     #mass
         u::RealVector  #velocity
         Du::RealVector #acceleration
-        rho::Float64   #density
-        Drho::Float64 #rate of density
+        ρ::Float64    #density
+        Dρ::Float64    #rate of density
         P::Float64     #pressure
         θ::Float64     #potential temperature
         S::Float64     #entropy
-        s::Float64    #entropy density
-        T::Float64    #temperature 
-        gGamma::RealVector #for the packing algorithm, "uneveness" of particle distribution
+        s::Float64     #entropy density
+        T::Float64     #temperature 
         type::Float64  #particle type
 
         function Particle(x::RealVector, u::RealVector, type::Float64)
-                obj = new(h0, 0.0, x, 0.0, u, VEC0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, VEC0, type)
+                obj = new(h0, 0.0, x, 0.0, u, VEC0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, type)
                 obj.T = T0 #prescribe initial temperature
-                obj.rho = rho0 * exp(-obj.x[2] * g / (R_mass * obj.T))
-                obj.m = obj.rho * dr^2
-                obj.P = R_mass * obj.T * obj.rho
-                obj.θ = obj.T * (((T0 * R_gas * rho0) / obj.P)^(2))^(1 / 7) #2/7 is exactly R_gas/cp
-                obj.S = obj.m * cv * log((cv * obj.T * (γ - 1)) / (γ * obj.rho^(γ - 1))) #calculate initial entropy from the initial temperature
+                obj.ρ   = ρ0 * exp(-obj.x[2] * g / (R_mass * obj.T))
+                obj.m = obj.ρ * dr^2
+                obj.P = R_mass * obj.T * obj.ρ
+                obj.θ = obj.T * (((T0 * R_gas * ρ0) / obj.P))^(2 / 7) #2/7 is exactly R_gas/cp
+                obj.S = obj.m * cv * log((cv * obj.T * (γ - 1)) / (γ * obj.ρ^(γ - 1))) #calculate initial entropy from the initial temperature
                 return obj
         end
 end
@@ -119,15 +118,14 @@ function make_system()
         generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID))
 
         create_cell_list!(sys)
-        improved_sys = atmo_packing.packing(sys, 1e-10, 1e-10, 100) #packing algorithm]
-        create_cell_list!(improved_sys)
-        apply!(improved_sys, balance_of_mass!)
-        apply!(improved_sys, balance_of_smoothing!)
-        apply!(improved_sys, find_s!)
-        apply!(improved_sys, set_temperature!)
-        apply!(improved_sys, set_pressure!)
-        apply!(improved_sys, balance_of_momentum!)
-        return improved_sys
+        create_cell_list!(sys)
+        apply!(sys, balance_of_mass!)
+        apply!(sys, balance_of_smoothing!)
+        apply!(sys, find_s!)
+        apply!(sys, set_temperature!)
+        apply!(sys, set_pressure!)
+        apply!(sys, balance_of_momentum!)
+        return sys
 end
 
 """
@@ -135,10 +133,10 @@ Define particle interactions
 """
 
 @inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64)
-        ker = (q.m / q.rho) * rDwendland2(0.5 * (p.h + q.h), r)
+        ker = (q.m / q.ρ) * rDwendland2(0.5 * (p.h + q.h), r)
         x_pq = p.x - q.x
-        p.Du += -p.rho * ker * (p.P / p.rho^2 + q.P / q.rho^2) * x_pq
-        p.Du += p.rho * 8.0 * ker * mu / (p.rho * q.rho) * dot(p.u - q.u, x_pq) / (r * r + 0.0025 * (p.h + q.h)^2) * x_pq
+        p.Du += -p.ρ * ker * (p.P / p.ρ^2 + q.P / q.ρ^2) * x_pq
+        p.Du += p.ρ * 8.0 * ker * mu / (p.ρ * q.ρ) * dot(p.u - q.u, x_pq) / (r * r + 0.0025 * (p.h + q.h)^2) * x_pq
 end
 
 """
@@ -148,39 +146,39 @@ Calculate density, pressure, temperature, potential temperature, entropy, entrop
 
 @inbounds function find_s!(p::Particle)
         if p.type == FLUID
-                p.s = p.S * p.rho / p.m
+                p.s = p.S * p.ρ / p.m
         end
 end
 
 @inbounds function set_temperature!(p::Particle)
         if p.type == FLUID
-                p.T = (p.rho^(γ - 1.0)) * exp(p.s / (p.rho * cv)) / (cv * (γ - 1.0))
+                p.T = (p.ρ^(γ - 1.0)) * exp(p.s / (p.ρ * cv)) / (cv * (γ - 1.0))
         end
 end
 
 @inbounds function set_pressure!(p::Particle)
         if p.type == FLUID
-                p.P = R_mass * p.rho * p.T
+                p.P = R_mass * p.ρ * p.T
         end
 end
 
 @inbounds function find_pot_temp!(p::Particle)
         if p.type == FLUID
-                p.θ = p.T * (((T0 * R_gas * rho0) / p.P)^(2))^(1 / 7) #2/7 is exactly R_gas/cp
+                p.θ = p.T * (((T0 * R_gas * ρ0) / p.P)^(2))^(1 / 7) #2/7 is exactly R_gas/cp
         end
 end
 
 @inbounds function entropy_production!(p::Particle, q::Particle, r::Float64)
         if p.type == FLUID && q.type == FLUID
-                ker = (q.m / q.rho) * rDwendland2(0.5 * (p.h + q.h), r)
+                ker = (q.m / q.ρ) * rDwendland2(0.5 * (p.h + q.h), r)
                 x_pq = p.x - q.x
                 u_pq = p.u - q.u
-                p.S += -4.0 * p.m * q.m * p.rho * ker * mu / (p.T * p.rho * q.rho) * dot(u_pq, x_pq)^2 / (r * r + 0.01 * p.h * q.h) * dt #viscous
+                p.S += -4.0 * p.m * q.m * p.ρ * ker * mu / (p.T * p.ρ * q.ρ) * dot(u_pq, x_pq)^2 / (r * r + 0.01 * p.h * q.h) * dt #viscous
         end
 end
 
 @inbounds function balance_of_smoothing!(p::Particle)
-        p.Dh += -0.5 * (p.h / p.rho) * p.Drho
+        p.Dh += -0.5 * (p.h / p.ρ) * p.Dρ
 end
 
 @inbounds function update_smoothing!(p::Particle)
@@ -192,16 +190,16 @@ end
 
 @inbounds function update_density!(p::Particle)
         if p.type == FLUID
-                p.rho += dt * p.Drho
+                p.ρ += dt * p.Dρ
         end
-        p.Drho = 0.0
+        p.Dρ = 0.0
 end
 
 @inbounds function balance_of_mass!(p::Particle, q::Particle, r::Float64)
-        ker = (q.m / q.rho) * rDwendland2(0.5 * (p.h + q.h), r)
-        p.Drho += p.rho * ker * (dot(p.x - q.x, p.u - q.u))
+        ker = (q.m / q.ρ) * rDwendland2(0.5 * (p.h + q.h), r)
+        p.Dρ += p.ρ * ker * (dot(p.x - q.x, p.u - q.u))
         if p.type == FLUID && q.type == FLUID
-                p.Drho += 2 * nu / p.rho * (p.rho - q.rho)
+                p.Dρ += 2 * nu / p.ρ * (p.ρ - q.ρ)
         end
 end
 
@@ -229,7 +227,7 @@ Move and accelerate
 function move!(p::Particle)
         if p.type == FLUID
                 p.x += dt * p.u
-                #p.rho = 0.0     #we want to reset the density only for the fluid, so we call it here
+                #p.ρ = 0.0     #we want to reset the density only for the fluid, so we call it here
         end
 end
 
@@ -338,7 +336,7 @@ function main()
         frame_counter = 0
 
         @show T0
-        @show rho0
+        @show ρ0
         @show mu
         @show c
         println("---------------------------")
@@ -374,9 +372,7 @@ function main()
                                 positions=[p.x for p in sys.particles],
                                 velocities=[p.v for p in sys.particles],
                                 densities=[p.ρ for p in sys.particles],
-                                densities_pert=[p.ρ′ for p in sys.particles],
                                 pressures=[p.P for p in sys.particles],
-                                pressures_pert=[p.P′ for p in sys.particles],
                                 temperatures=[p.T for p in sys.particles],
                                 pot_temperatures=[p.θ for p in sys.particles],
                                 types=[p.type for p in sys.particles]

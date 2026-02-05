@@ -5,11 +5,12 @@
 
  all thermodynamic processes are adiabatic
 """
-module AdiabaticStaticWitch
+module PerturbedStaticWitch
 export main
 
 using DrWatson
 @quickactivate "SPH"
+
 using Printf
 using SmoothedParticles
 using DataFrames
@@ -17,8 +18,9 @@ using Plots
 using JLD2
 using CSV
 
+
 # UNCOMMENT IF ONE WISHES TO SAVE FRAMES FOR PARAVIEW
-#const folder_name = "hopkins_total_witch"
+#const folder_name = "full_hopkins_perturbed_witch"
 #const export_vars = (:v, :ρ, :P, :θ, :T, :type)
 
 # ==============
@@ -90,12 +92,21 @@ mutable struct Particle <: AbstractParticle
         m::Float64        # mass
         v::RealVector     # velocity
         Dv::RealVector    # acceleration
+        ρ_bg::Float64     # background density
+        ρ′::Float64       # density perturbation
         ρ::Float64        # total density
+        P_bg::Float64     # background pressure
+        P′::Float64       # pressure perturbation
         P::Float64        # total pressure
+        θ_bg::Float64     # bakcground potential temperature
+        θ′::Float64       # potential temperature perturbation
         θ::Float64        # total potential temperature
+        T_bg::Float64     # background temperature
+        T′::Float64       # temperature perturbation
         T::Float64        # total temperature
         type::Float64     # particle type
         A::Float64        # entropy-like variable
+        A_bg::Float64        # entropy-like variable
 
         function Particle(x::RealVector, v::RealVector, type::Float64)
                 obj = new(
@@ -104,9 +115,17 @@ mutable struct Particle <: AbstractParticle
                         0.0,            # m
                         v,              # v
                         VEC0,           # Dv
+                        0.0,            # ρ_bg
+                        0.0,            # ρ′
                         0.0,            # ρ
+                        0.0,            # P_bg
+                        0.0,            # P′
                         0.0,            # P
+                        0.0,            # θ_bg 
+                        0.0,            # θ′ 
                         0.0,            # θ 
+                        0.0,            # T_bg
+                        0.0,            # T′
                         0.0,            # T
                         type,           # type
                         0.0,            # A
@@ -114,12 +133,26 @@ mutable struct Particle <: AbstractParticle
 
                 # initial hydrostatic isothermal state 
 
-                obj.T = T_bg
-                obj.ρ = background_density(obj.x[2])
-                obj.P = background_pressure(obj.x[2])
-                obj.θ = background_pot_temperature(obj.x[2])
-                obj.m = obj.ρ * dr * dr
+
+                obj.T_bg = T_bg
+                obj.ρ_bg = background_density(obj.x[2])
+                obj.P_bg = background_pressure(obj.x[2])
+                obj.θ_bg = background_pot_temperature(obj.x[2])
+                obj.A_bg = background_entropy(obj.x[2])
+
+                obj.ρ′ = 0.0
+                obj.P′ = 0.0
+                obj.T′ = 0.0
+                obj.θ′ = 0.0
+
+                obj.T = obj.T′ + T_bg
+                obj.ρ = obj.ρ′ + obj.ρ_bg
+                obj.P = obj.P′ + obj.P_bg
+                obj.θ = obj.θ′ + obj.θ_bg
+
+                obj.m = obj.ρ * dr^2
                 obj.A = obj.P / obj.ρ^γ
+
                 return obj
         end
 end
@@ -142,8 +175,8 @@ function make_system()
         generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID))
 
         create_cell_list!(sys)
-        packing!(sys)
-        create_cell_list!(sys)
+        #packing!(sys)
+        #create_cell_list!(sys)
         return sys
 end
 
@@ -166,12 +199,19 @@ function background_pot_temperature(y::Float64)
         return T_bg * (((T_bg * R_gas * ρ0) / P_bg))^(2 / 7)
 end
 
+function background_entropy(y::Float64)
+        P_bg = background_pressure(y)
+        ρ_bg = background_density(y)
+        return P_bg / ρ_bg^γ
+end
+
 # ==============
 # Pressure computation
 # ==============
 
 @inbounds function reset_pressure!(p::Particle)
         p.P = 0.0
+        p.P′ = 0.0 #this should not be necessary; robustness precaution
 end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64)
@@ -181,6 +221,8 @@ end
 
 @inbounds function finalize_pressure!(p::Particle)
         p.P = p.P^γ
+        p.P_bg = background_pressure(p.x[2])
+        p.P′ = p.P - p.P_bg
 end
 
 # ==============
@@ -189,22 +231,32 @@ end
 
 @inbounds function find_temperature!(p::Particle)
         p.T = p.P / (R_mass * p.ρ)
+        p.T′ = p.T - p.T_bg
 end
 
 @inbounds function find_pot_temp!(p::Particle)
         p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
+        p.θ_bg = background_pot_temperature(p.x[2])
+        p.θ′ = p.θ - p.θ_bg
 end
 
 # ==============
 # Smoothing-length & density evolution
 # ==============
 
+@inbounds function reset_density!(p::Particle)
+        p.ρ = 0.0
+        p.ρ′ = 0.0 # this should not be necessary; robustness precaution
+end
+
+
 @inbounds function compute_density!(p::Particle, q::Particle, r::Float64)
         p.ρ += q.m * wendland2(p.h, r)
 end
 
-@inbounds function reset_density!(p::Particle)
-        p.ρ = 0.0
+@inbounds function finalize_density!(p::Particle)
+        p.ρ_bg = background_density(p.x[2])
+        p.ρ′ = p.ρ - p.ρ_bg
 end
 
 @inbounds function update_smoothing!(p::Particle)
@@ -225,8 +277,8 @@ function damping_structure(z, zₜ, zᵦ, γᵣ)
         end
 end
 
-function gravity()
-        return -g * VECY  # the (density) of gravity is - g * VECY
+function buyoancy_force(p::Particle)
+        return -g * VECY * p.ρ′ / p.ρ # the (density) of gravity is - g * VECY
 
 end
 # ==============
@@ -245,8 +297,19 @@ end
         pP = max(P_floor, p.P)
         qP = max(P_floor, q.P)
 
-        # pairwise conservative force
-        p.Dv += -prefac * (pP^expfac * ker_i + qP^expfac * ker_j) * x_pq
+        # acceleration due the gradient of total pressure
+        a_tot = -prefac * (pP^expfac * ker_i + qP^expfac * ker_j) * x_pq
+
+        prefac_bg = q.m * (p.A_bg * q.A_bg)^(1 / γ)
+        pP_bg = max(P_floor, p.P_bg)
+        qP_bg = max(P_floor, q.P_bg)
+
+        # acceleration due to the gradient of background pressure
+        a_bg = -prefac_bg * (pP_bg^expfac * ker_i + qP_bg^expfac * ker_j) * x_pq
+
+        # total acceleration
+        p.Dv += a_tot - a_bg
+
 
         # artificial viscous force
         if dot_product < 0.0
@@ -271,11 +334,15 @@ end
 # ==============
 
 function move!(p::Particle)
-        p.x += dt * p.v
+        if p.type == FLUID
+                p.x += dt * p.v
+        end
 end
 
 function accelerate!(p::Particle)
-        p.v += 0.5 * dt * (p.Dv + gravity() + damping_structure(p.x[2], zₜ, zᵦ, γᵣ)) # this is a vector sum
+        if p.type == FLUID
+                p.v += 0.5 * dt * (p.Dv + buyoancy_force(p) + damping_structure(p.x[2], zₜ, zᵦ, γᵣ)) # this is a vector sum
+        end
         p.Dv = VEC0
 end
 
@@ -292,6 +359,7 @@ function verlet_step!(sys::ParticleSystem{Particle})
         # compute density and smoothing length
         apply!(sys, reset_density!)
         apply!(sys, compute_density!)
+        apply!(sys, finalize_density!)
         apply!(sys, update_smoothing!)
         create_cell_list!(sys)
 
@@ -330,7 +398,7 @@ end
 function energy(sys::ParticleSystem)::Float64
         E = 0.0
         for p in sys.particles
-		E += 0.5 * p.ρ * dot(p.v,p.v) + p.ρ * g * p.x[2]
+                E += 0.5 * p.ρ * dot(p.v, p.v) + p.ρ * g * p.x[2]
         end
         return E
 end
@@ -404,6 +472,7 @@ function main()
                         E = energy(sys)
                         @show E
                         push!(ene, (t, E))
+
                         # the output is saved into a jld2 file, which is more suitable for analysis (in julia) than vtk
                         frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter,4,'0')).jld2")
                         jldsave(frame_file;
@@ -421,7 +490,6 @@ function main()
                         )
 
 
-
                         # UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
                         #save_frame!(out, sys, export_vars...)
                         CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
@@ -432,7 +500,7 @@ function main()
                 end
         end
 
-        save_pvd_file(out)
+        #save_pvd_file(out)
 
         p1 = plot(
                 average_velocities.t, average_velocities.u;
@@ -444,13 +512,15 @@ function main()
                 maximum_velocities.t, maximum_velocities.u;
                 xlabel="t (s)",
                 ylabel="max. velocity (m/s)",
-                lc=:orange,
+                lc=:purple,
         )
         p3 = plot(
                 ene.t, ene.E;
                 xlabel="t (s)",
                 ylabel="Total energy J",
                 lc=:orange,)
+
+        #savefig(joinpath(outpath,"velocities.pdf"))
 
         plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
 
