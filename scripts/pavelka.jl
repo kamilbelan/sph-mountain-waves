@@ -68,7 +68,7 @@ const WALL = 1.0
 const MOUNTAIN = 2.0
 
 
-include(scriptsdir("utils", "new_packing.jl"))
+include(srcdir("utils", "new_packing.jl"))
 """
 Declare the struct Particle <: AbstractParticle
 """
