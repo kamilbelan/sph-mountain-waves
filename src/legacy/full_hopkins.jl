@@ -48,7 +48,7 @@ const c = sqrt(65e3 * (7 / 5) / ρ0) # speed of sound
 # artifical parameters
 const ν = 0.1 * h0 * c        # pressure stabilization
 const ε = 0.01
-const α = 0.1                # usually α = 0.05 - 0.2
+const α = 0.1                 # usually α = 0.05 - 0.2
 const β = 2 * α               # usually β = 2 α 
 
 # meteorological parameters
@@ -64,7 +64,7 @@ const R_gas = 8.314            # universal gas constant
 const cp = 7 * R_mass / 2
 const cv = cp - R_mass
 const γ = cp / cv              # Poisson constant
-const T_bg = 250.0               # background (ie. initial) temperature
+const T_bg = 250.0             # background (ie. initial) temperature
 
 # temporal parameters
 const dt = 0.01 * h0 / c       # time step
@@ -132,8 +132,6 @@ mutable struct Particle <: AbstractParticle
                 )
 
                 # initial hydrostatic isothermal state 
-
-
                 obj.T_bg = T_bg
                 obj.ρ_bg = background_density(obj.x[2])
                 obj.P_bg = background_pressure(obj.x[2])

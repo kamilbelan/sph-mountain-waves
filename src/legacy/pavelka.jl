@@ -258,6 +258,7 @@ function verlet_step!(sys::ParticleSystem)
         apply!(sys, update_smoothing!)
         apply!(sys, update_density!)
         create_cell_list!(sys)
+
         apply!(sys, find_s!)
         apply!(sys, set_temperature!)
         apply!(sys, set_pressure!)
