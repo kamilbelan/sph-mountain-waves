@@ -1,0 +1,27 @@
+# spatial and temporal resolution
+dr = [1040.0]            # 26e3/25 = 1040, 26e3/50 = 520, 26e4/75 = 346 , 26e3/100 = 260
+dt_rel = [0.01]           #this will be multiplied by h0/c
+t_end  = [2.0]         
+
+# numerics
+rho_floor = [1e-6]
+P_floor = [1e-10]
+eta = [1.8]
+epsilon = [0.01]
+alpha = [0.1]             # usually α = 0.05 - 0.2
+beta = [0.2]              # usually β = 2 α
+gamma_r_rel = [10]        # this will be multiplied by N = sqrt(0.0196)
+
+# choice of the formulation
+# options include:
+#    StaticPerturbedHopkins
+#    StaticHopkinsTotal
+#    StaticFullHopkins
+#    StaticPavelka
+#    StaticWCSPH
+
+formulation = ["StaticWCSPH"]
+
+
+
+

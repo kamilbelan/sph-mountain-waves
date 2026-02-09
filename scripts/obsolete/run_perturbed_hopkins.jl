@@ -1,8 +1,8 @@
 using DrWatson
 @quickactivate "SPH"
 
-include(srcdir("formulations", "StaticPavelka.jl"))
-using .StaticPavelka
+include(srcdir("formulations", "PerturbedHopkins.jl"))
+using .StaticPerturbedHopkins
 
 # define global constants (physics & geometry)
 global_params = Dict(
@@ -17,13 +17,6 @@ global_params = Dict(
 	:ρ0       => 1.393,
 	:N        => sqrt(0.0196),         
 
-	# numerics
-	:rho_floor => 1e-6,
-	:P_floor   => 1e-10,
-	:ε         => 0.01,
-	:α         => 0.1, # usually α = 0.05 - 0.2
-	:β         => 0.2, # usually β = 2 α
-
 	# geometry
 	:dom_height => 26e3,
 	:dom_length => 400e3,
@@ -36,22 +29,37 @@ global_params = Dict(
 
 # DrWatson will generate every possible combination of these lists.
 sweep_params = Dict(
-	:η      => [1.5, 1.8],          
+	# spatial and temporal resolution
 	:dr     => [26e3/25, 26e3/50, 26e3/75],            
-	:t_end  => [2.0, 5.0],          
-	:γᵣ     => [10 * sqrt(0.0196)]   # N = sqrt(0.0196)
+	:dt_rel => [0.01],
+	:t_end  => [2.0],          
+	
+	# numerics
+	:rho_floor => [1e-6],
+	:P_floor   => [1e-10],
+	:η         => [1.8],          
+	:ϵ         => [0.01],
+	:α         => [0.1], # usually α = 0.05 - 0.2
+	:β         => [0.2], # usually β = 2 α
+	:γᵣ_rel        => [10 * sqrt(0.0196)],   # N = sqrt(0.0196)
+
 )
 
 # dict_list merges the global dict with the sweep dict and expands the lists.
-job_list = dict_list(merge(global_params, sweep_params))
+job_list = dict_list(sweep_params)
 
-println("Starting StaticPavelka batch simulation")
+println("Starting StaticPerturbedHopkins batch simulation")
 println("Total simulations to run: $(length(job_list))")
 
-for (i, params) in enumerate(job_list)
-	println("\n[Job $i/$(length(job_list))] Parameters: η=$(params[:η]), t_end=$(params[:t_end])")
-	output_path = StaticPavelka.run_sim(params)
-	println("FINISHED. Saved to: $output_path")
+for (i, sim_params) in enumerate(job_list)
+
+    for (key, value) in sort(collect(sim_params), by = x -> x[1])
+        println(rpad("  $key", 15), "= $value")
+    end
+    
+    output_path = StaticPerturbedHopkins.run_sim(global_params, sim_params)
+    
+    println("FINISHED. Saved to: $output_path")
 end
 
 println("\n BATCH COMPLETE.")

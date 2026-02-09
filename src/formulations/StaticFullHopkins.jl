@@ -1,12 +1,12 @@
 """
  Static atmosphere above a mountain with the Witch of Agnesi profile:
 
- h(x) = (hₘ a²) / (x² + a²),
+ h(x) = (h_m a²) / (x² + a²),
 
  all thermodynamic processes are adiabatic
 """
 
-module StaticWCSPH
+module StaticFullHopkins
 
 export run_sim
 
@@ -25,11 +25,11 @@ using LinearAlgebra
 const FLUID = 0.0
 const WALL = 1.0
 const MOUNTAIN = 2.0
-include(srcdir("utils", "new_packing.jl"))
 
-# ==============
+#include(srcdir("utils", "new_packing.jl"))
+# ============================================================
 # PARTICLE CONSTRUCTOR
-# ==============
+# ============================================================
 
 mutable struct Particle <: AbstractParticle
 	h::Float64        # smoothing length
@@ -43,17 +43,21 @@ mutable struct Particle <: AbstractParticle
 	P_bg::Float64     # background pressure
 	P′::Float64       # pressure perturbation
 	P::Float64        # total pressure
-	c::Float64        # local speed of sound
-	θ_bg::Float64     # bakcground potential temperature
+	θ_bg::Float64     # background potential temperature
 	θ′::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T′::Float64       # temperature perturbation
 	T::Float64        # total temperature
 	type::Float64     # particle type
+	A::Float64        # entropy-like variable
+	A_bg::Float64      # entropy-like variable
 
-	function Particle(x::RealVector, v::RealVector, type::Float64, config::Dict)
-		@unpack η, dr, T_bg, g, R_mass, R_gas, γ, ρ0 = config
+	function Particle(x::RealVector, v::RealVector, type::Float64, global_params::Dict, sim_params::Dict)
+		@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
+		@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
+		@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
+		@unpack η, dr, dt_rel, t_end = sim_params
 
 		# Derived values within the constructor
 		h0 = η * dr
@@ -69,7 +73,6 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # P_bg
 			0.0,            # P′
 			0.0,            # P
-			0.0,            # c
 			0.0,            # θ_bg 
 			0.0,            # θ′ 
 			0.0,            # θ 
@@ -77,13 +80,15 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # T′
 			0.0,            # T
 			type,           # type
+			0.0,            # A
 		)
 
-		# initialization
+		# initialization 
 		obj.T_bg = T_bg
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
+		obj.A_bg = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
 
 		obj.ρ′ = 0.0
 		obj.P′ = 0.0
@@ -96,7 +101,8 @@ mutable struct Particle <: AbstractParticle
 		obj.θ = obj.θ′ + obj.θ_bg
 
 		obj.m = obj.ρ * dr^2
-		obj.c = sqrt(γ * obj.P / obj.ρ)
+		obj.A = obj.P / obj.ρ^γ
+
 		return obj
 	end
 end
@@ -125,22 +131,25 @@ function background_entropy(y::Float64, ρ0::Float64, T_bg::Float64, g::Float64,
 	return P_bg / ρ_bg^γ
 end
 
-
 # ==============
 # Pressure computation
 # ==============
 
-@inbounds function compute_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
+@inbounds function reset_pressure!(p::Particle)
+	p.P = 0.0
+	p.P′ = 0.0 #this should not be necessary; robustness precaution
+end
+
+@inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
+	ker = wendland2(0.5 * (p.h + q.h), r)
+	p.P += q.m * q.A^(1 / γ) * ker
+end
+
+@inbounds function finalize_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, γ::Float64)
+	p.P = p.P^γ
 	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
-	p.P′ = p.c^2 * p.ρ′
-	p.P = p.P_bg + p.P′
+	p.P′ = p.P - p.P_bg
 end
-
-@inbounds function compute_sound_speed!(p::Particle, rho_floor::Float64, γ::Float64)
-	prho = max(p.ρ, rho_floor)
-	p.c = sqrt(γ * p.P / prho)
-end
-
 
 # ==============
 # Thermodynamics (simplified for P–A)
@@ -171,7 +180,7 @@ end
 	p.ρ += q.m * wendland2(p.h, r)
 end
 
-@inbounds function finalize_density!(p::Particle, ρ0, T_bg, g, R_mass)
+@inbounds function finalize_density!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
 	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
 	p.ρ′ = p.ρ - p.ρ_bg
 end
@@ -185,9 +194,9 @@ end
 # Rayleigh damping
 # ==============
 
-function damping_structure(z::Float64, zₜ::Float64, zᵦ::Float64, γᵣ::Float64)
-	if z >= (zₜ - zᵦ)
-		return -γᵣ * (sin(π / 2 * (1 - (zₜ - zᵦ) / zᵦ)))^2 * VECY
+function damping_structure(z::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
+	if z >= (z_t - z_β)
+		return -γ_r * (sin(π / 2 * (1 - (z_t - z_β) / z_β)))^2 * VECY
 	else
 		return VEC0
 	end
@@ -198,35 +207,51 @@ function buyoancy_force(p::Particle, g::Float64)
 
 end
 
-
 # ==============
 # P–A momentum equation 
 # ==============
 
-@inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ϵ::Float64, rho_floor::Float64, γ::Float64)
+@inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ε::Float64, rho_floor::Float64, P_floor::Float64, γ::Float64)
 	x_pq = p.x - q.x
 	v_pq = p.v - q.v
 	dot_product = SmoothedParticles.dot(x_pq, v_pq)
 
-	h_ij = 0.5 * (p.h + q.h)
-	ker = rDwendland2(h_ij, r)
+	prefac = q.m * (p.A * q.A)^(1 / γ)
+	expfac = 1.0 - 2.0 / γ
+	ker_i = rDwendland2(p.h, r)
+	ker_j = rDwendland2(q.h, r)
+	pP = max(P_floor, p.P)
+	qP = max(P_floor, q.P)
 
-	prho = max(p.ρ, rho_floor)
-	qrho = max(q.ρ, rho_floor)
-	# pairwise conservative force
-	p.Dv += -q.m * (p.P′ / prho^2 + q.P′ / qrho^2) * ker * x_pq
+	# acceleration due the gradient of total pressure
+	a_tot = -prefac * (pP^expfac * ker_i + qP^expfac * ker_j) * x_pq
+
+	prefac_bg = q.m * (p.A_bg * q.A_bg)^(1 / γ)
+	pP_bg = max(P_floor, p.P_bg)
+	qP_bg = max(P_floor, q.P_bg)
+
+	# acceleration due to the gradient of background pressure
+	a_bg = -prefac_bg * (pP_bg^expfac * ker_i + qP_bg^expfac * ker_j) * x_pq
+
+	# total acceleration
+	p.Dv += a_tot - a_bg
+
 
 	# artificial viscous force
 	if dot_product < 0.0
+		h_ij = 0.5 * (p.h + q.h)
+		ker_ij = rDwendland2(h_ij, r)
+		prho = max(p.ρ, rho_floor)
+		qrho = max(q.ρ, rho_floor)
 		c_i = sqrt(γ * p.P / prho)
 		c_j = sqrt(γ * q.P / qrho)
 		c_ij = 0.5 * (c_i + c_j)
 		ρ_ij = 0.5 * (prho + qrho)
-		μ_ij = (h_ij * dot_product) / (r * r + ϵ * h_ij * h_ij)
+		μ_ij = (h_ij * dot_product) / (r * r + ε * h_ij * h_ij)
 		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
 
 		# artificial viscous force
-		p.Dv += -q.m * π_ij * ker * x_pq
+		p.Dv += -q.m * π_ij * ker_ij * x_pq
 	end
 end
 
@@ -240,9 +265,9 @@ function move!(p::Particle, dt::Float64)
 	end
 end
 
-function accelerate!(p::Particle, dt::Float64, g::Float64, zₜ::Float64, zᵦ::Float64, γᵣ::Float64)
+function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
 	if p.type == FLUID
-		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], zₜ, zᵦ, γᵣ)) # this is a vector sum
+		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], z_t, z_β, γ_r)) # this is a vector sum
 	end
 	p.Dv = VEC0
 end
@@ -268,41 +293,45 @@ end
 function energy(sys::ParticleSystem, g::Float64)::Float64
 	E = 0.0
 	for p in sys.particles
-		E += 0.5 * p.ρ * dot(p.v, p.v) + p.ρ * g * p.x[2]
+		E += 0.5 * p.ρ * SmoothedParticles.dot(p.v, p.v) + p.ρ * g * p.x[2]
 	end
 	return E
 end
+
 
 
 # ==============
 # Main Entry Point
 # ==============
 
-function run_sim(params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict)
 	# unpack all parameters
-	@unpack dom_height, dom_length, dr, bc_width, hₘ, a, η, ρ0, t_end, T_bg = params
-	@unpack rho_floor, P_floor, ϵ, α, β, zₜ, zᵦ, γᵣ = params
-	@unpack g, R_mass, R_gas, γ = params
-
+	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
+	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
+	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+	
 	# compute derived parameters
 	h0 = η * dr
+	bc_width = 6 * dr
 	c = sqrt(65e3 * (γ) / ρ0)
-	dt = 0.01 * h0 / c
-	dt_frame = t_end / 100
+	dt = dt_rel * h0 / c
+	dt_frame = t_end / 100.0
+	γ_r = γ_r_rel * N
 
 	# system construction 
 	function make_system()
 		grid = Grid(dr, :hexagonal)
 		domain = Rectangle(-dom_length / 2.0, 0.0, dom_length / 2.0, dom_height)
 		fence = BoundaryLayer(domain, grid, bc_width)
-		witch_profile(x) = (hₘ * a^2) / (x^2 + a^2)
+		witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
 		mountain = Specification(domain, x -> (x[2] <= witch_profile(x[1])))
 
 		sys = ParticleSystem(Particle, domain + fence, h0)
 		# passing params to the Particle constructor
-		generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, params))
-		generate_particles!(sys, grid, fence, x -> Particle(x, VEC0, WALL, params))
-		generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID, params))
+		generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
+		generate_particles!(sys, grid, fence, x -> Particle(x, VEC0, WALL, global_params, sim_params))
+		generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
 
 		create_cell_list!(sys)
 		return sys
@@ -311,7 +340,7 @@ function run_sim(params::Dict)
 	# verlet step 
 	function verlet_step!(sys)
 		# half-step acceleration & drift
-		apply!(sys, p -> accelerate!(p, dt, g, zₜ, zᵦ, γᵣ))
+		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 		apply!(sys, p -> move!(p, dt))
 		create_cell_list!(sys)
 
@@ -323,36 +352,32 @@ function run_sim(params::Dict)
 		create_cell_list!(sys)
 
 		# pressure–entropy: build P̄ from A
-		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass))
-		apply!(sys, p -> compute_sound_speed!(p, rho_floor, γ))
+		apply!(sys, reset_pressure!)
+		apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
+		apply!(sys, p -> finalize_pressure!(p, ρ0, T_bg, g, R_mass, γ))
 
 		# thermodynamics from P̄ and ρ
 		apply!(sys, p -> find_temperature!(p, R_mass))
 		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
 
 		# forces
-		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
-		apply!(sys, p -> accelerate!(p, dt, g, zₜ, zᵦ, γᵣ))
+		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ ))
+		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 	end
 
 	# execution loop
 	sys = make_system()
 
-	run_name = savename(params) # DrWatson magic 
+	run_name = savename(sim_params) # DrWatson magic 
 	run_dir = datadir("sims", run_name)
 	mkpath(run_dir)
 
 	println("Output directory: $run_dir")
 
 	# a great help from DrWatson with metadata processing
-	@tagsave(
-		joinpath(run_dir, "metadata.jld2"),
-		merge(params, Dict(
-			:script => basename(@__FILE__),
-			:module => "StaticWCSPH"
-		))
-	)
-
+	metadata_dict = Dict(String(k) => v for (k, v) in sim_params)
+	metadata_dict["module"] = "StaticFullHopkins" # add module metadata manually
+	@tagsave(joinpath(run_dir, "metadata.jld2"), metadata_dict)
 
 	# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
 	#outpath = joinpath(RESULTS_DIR, folder_name)
@@ -375,7 +400,8 @@ function run_sim(params::Dict)
 		t = k * dt
 		verlet_step!(sys)
 
-		if (k % Int(round(dt_frame / dt)) == 0)
+		save_interval = max(1, Int(round(dt_frame / dt)))
+		if k % save_interval == 0
 			@show t
 			println("num. of particles = ", length(sys.particles))
 
