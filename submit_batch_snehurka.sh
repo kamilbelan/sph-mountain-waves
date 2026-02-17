@@ -49,8 +49,8 @@ echo "   Running with $JULIA_NUM_THREADS threads"
 cd $SLURM_SUBMIT_DIR
 echo "   Working Directory: $(pwd)"
 
-# 3. Define Julia Binary Path
-JULIA_BIN=/usr/work/belank/julia-1.12.4/bin/julia
+# define julia binary path
+JULIA_BIN=/usr/work/belank/software/julia-1.12.4/bin/julia
 
 # ==============================================================================
 # EXECUTION
