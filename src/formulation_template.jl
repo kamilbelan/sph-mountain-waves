@@ -120,7 +120,7 @@ end
 # ==============
 
 # ==============
-# Smoothing-length & density evolution (e.g. resetting the density for SPH summation, setting the adaptive h)
+# Smoothing-length evolution (e.g. calculating the smth. rate, setting the adaptive h)
 # ==============
 
 # ==============
@@ -146,7 +146,7 @@ end
 # ==============
 
 # ==============
-# Density balance
+# Mass balance
 # ==============
 
 # ==============
