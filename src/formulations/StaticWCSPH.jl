@@ -410,6 +410,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	   pot_temperatures=[p.θ for p in sys.particles],
 	   types=[p.type for p in sys.particles]
 	   )
+			frame_counter += 1
 
 			# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
 			#save_frame!(out, sys, export_vars...)

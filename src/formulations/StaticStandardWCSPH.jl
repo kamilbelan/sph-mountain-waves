@@ -6,7 +6,7 @@
  all thermodynamic processes are adiabatic
 """
 
-module StaticTEMPLATE
+module StaticStandardWCSPH
 
 export run_sim
 
@@ -161,18 +161,17 @@ end
 # ==============
 
 @inbounds function balance_of_smoothing!(p::Particle)
-	p.Dh = -0.5*(p.h/p.ρ)*p.Dρ
+	p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
+end
+
+@inbounds function compute_smoothing!(p::Particle, dt::Float64)
+	p.h += p.Dh * dt
+	
 end
 
 @inbounds function reset_smoothing_rate!(p::Particle)
 	p.Dh = 0.0
 end
-
-@inbounds function update_smoothing!(p::Particle, η::Float64, rho_floor::Float64)
-	rho = max(p.ρ, rho_floor)
-	p.h = η * sqrt(p.m / rho)
-end
-
 
 
 # ==============
@@ -237,7 +236,7 @@ end
 @inbounds function compute_density!(p::Particle, dt::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
 	p.ρ += p.Dρ * dt
 	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-	p.ρ' = p.ρ - p.ρ_bg
+	p.ρ′ = p.ρ - p.ρ_bg
 end
 
 @inbounds function reset_density_rate!(p::Particle)
@@ -259,6 +258,9 @@ function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::F
 	if p.type == FLUID
 		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], z_t, z_β, γ_r)) # this is a vector sum
 	end
+end
+
+function reset_acceleration!(p::Particle)
 	p.Dv = VEC0
 end
 
@@ -335,28 +337,40 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> move!(p, dt))
 		create_cell_list!(sys)
 
-		# compute density and smoothing length
-		apply!(sys, p -> reset_density!(p))
-		apply!(sys, compute_density!)
-		apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
-		apply!(sys, p -> update_smoothing!(p, η, rho_floor))
+		# reset rates 
+		apply!(sys, p -> reset_acceleration!(p))
+		apply!(sys, p -> reset_density_rate!(p))
+		apply!(sys, p -> reset_smoothing_rate!(p))
+
+		# compute density (balance of mass) and smoothing length
+		apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
+		apply!(sys, p -> balance_of_smoothing!(p))
+		apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
+		apply!(sys, p -> compute_smoothing!(p, dt))
 		create_cell_list!(sys)
 
-		# pressure–entropy: build P̄ from A
+		# compute pressure
 		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
-		apply!(sys, p -> compute_sound_speed!(p, rho_floor, γ))
-
-		# thermodynamics from P̄ and ρ
+		# compute temperature and potential temperature
 		apply!(sys, p -> find_temperature!(p, R_mass))
 		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
-
-		# forces
+		# compute acceleration (balance of momentum)
 		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 	end
 
 	# execution loop
 	sys = make_system()
+	
+	# compute pressure
+	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
+	# compute temperature and potential temperature
+	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+	# compute acceleration (balance of momentum)
+
+	apply!(sys, p -> reset_acceleration!(p))
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 
 	run_name = savename(sim_params) # DrWatson magic 
 	run_dir = datadir("sims", run_name)
@@ -422,6 +436,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	   pot_temperatures=[p.θ for p in sys.particles],
 	   types=[p.type for p in sys.particles]
 	   )
+			frame_counter += 1
 
 			# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
 			#save_frame!(out, sys, export_vars...)
