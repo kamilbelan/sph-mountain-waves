@@ -178,12 +178,18 @@ end
 # Additional forces: Rayleigh damping & gravity/buyoancy
 # ==============
 
-function damping_structure(z::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
-	if z >= (z_t - z_β)
-		return -γ_r * (sin(π / 2 * (1 - (z_t - z_β) / z_β)))^2 * VECY
-	else
-		return VEC0
-	end
+function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float64, γ_r::Float64)
+    z_bottom = z_t - z_β
+    if z >= z_bottom
+        ζ = (z - z_bottom) / z_β 
+        
+        profile = (sin(π / 2 * ζ))^2 
+        
+        # friction force
+        return -γ_r * profile * v 
+    else
+        return VEC0
+    end
 end
 
 function buyoancy_force(p::Particle, g::Float64)
@@ -351,9 +357,11 @@ function run_sim(global_params::Dict, sim_params::Dict)
 
 		# compute pressure
 		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
+
 		# compute temperature and potential temperature
 		apply!(sys, p -> find_temperature!(p, R_mass))
 		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+
 		# compute acceleration (balance of momentum)
 		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
@@ -362,13 +370,14 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# execution loop
 	sys = make_system()
 	
-	# compute pressure
+	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
+
 	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
 	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
-	# compute acceleration (balance of momentum)
 
+	# compute acceleration (balance of momentum)
 	apply!(sys, p -> reset_acceleration!(p))
 	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 
