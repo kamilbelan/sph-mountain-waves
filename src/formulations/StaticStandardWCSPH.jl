@@ -18,6 +18,7 @@ using SmoothedParticles
 using DataFrames
 using Plots
 using JLD2
+using HDF5
 using CSV
 using Parameters 
 using LinearAlgebra
@@ -166,7 +167,7 @@ end
 
 @inbounds function compute_smoothing!(p::Particle, dt::Float64)
 	p.h += p.Dh * dt
-	
+
 end
 
 @inbounds function reset_smoothing_rate!(p::Particle)
@@ -179,17 +180,17 @@ end
 # ==============
 
 function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float64, γ_r::Float64)
-    z_bottom = z_t - z_β
-    if z >= z_bottom
-        ζ = (z - z_bottom) / z_β 
-        
-        profile = (sin(π / 2 * ζ))^2 
-        
-        # friction force
-        return -γ_r * profile * v 
-    else
-        return VEC0
-    end
+	z_bottom = z_t - z_β
+	if z >= z_bottom
+		ζ = (z - z_bottom) / z_β 
+
+		profile = (sin(π / 2 * ζ))^2 
+
+		# friction force
+		return -γ_r * profile * v 
+	else
+		return VEC0
+	end
 end
 
 function buyoancy_force(p::Particle, g::Float64)
@@ -262,7 +263,7 @@ end
 
 function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
 	if p.type == FLUID
-		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], z_t, z_β, γ_r)) # this is a vector sum
+		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
 end
 
@@ -369,7 +370,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 
 	# execution loop
 	sys = make_system()
-	
+
 	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
 
@@ -430,32 +431,68 @@ function run_sim(global_params::Dict, sim_params::Dict)
 			@show E
 			push!(ene, (t, E))
 
-			# the output is saved into a jld2 file, which is more suitable for analysis (in julia) than vtk
-			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter,4,'0')).jld2")
-			jldsave(frame_file;
-	   t, frame_counter,
-	   n_particles=length(sys.particles),
-	   positions=[p.x for p in sys.particles],
-	   velocities=[p.v for p in sys.particles],
-	   densities=[p.ρ for p in sys.particles],
-	   densities_pert=[p.ρ′ for p in sys.particles],
-	   pressures=[p.P for p in sys.particles],
-	   pressures_pert=[p.P′ for p in sys.particles],
-	   temperatures=[p.T for p in sys.particles],
-	   pot_temperatures=[p.θ for p in sys.particles],
-	   types=[p.type for p in sys.particles]
-	   )
-			frame_counter += 1
+			# ---------------------------------------------------------
+			# DATA EXPORT: HDF5 + Flattened Arrays (SoA) for ParaView
+			# ---------------------------------------------------------
+			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter, 4, '0')).h5")
 
-			# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
-			#save_frame!(out, sys, export_vars...)
+			# 1. Get particle count and pre-allocate flat arrays
+			N_parts = length(sys.particles)
+			pos_matrix = zeros(Float64, 3, N_parts)
+			vel_matrix = zeros(Float64, 3, N_parts)
+			densities = zeros(Float64, N_parts)
+			densities_pert = zeros(Float64, N_parts)
+			pressures = zeros(Float64, N_parts)
+			pressures_pert = zeros(Float64, N_parts)
+			temperatures = zeros(Float64, N_parts)
+			pot_temperatures = zeros(Float64, N_parts)
+			types = zeros(Float64, N_parts)
+
+			# 2. Single fast pass to extract Array of Structs (AoS) into Struct of Arrays (SoA)
+			@inbounds for (i, p) in enumerate(sys.particles)
+				pos_matrix[1, i] = p.x[1]
+				pos_matrix[2, i] = p.x[2]
+				pos_matrix[3, i] = 0.0  # ParaView expects 3D coordinates
+
+				vel_matrix[1, i] = p.v[1]
+				vel_matrix[2, i] = p.v[2]
+				vel_matrix[3, i] = 0.0  # ParaView expects 3D vectors
+
+				densities[i] = p.ρ
+				densities_pert[i] = p.ρ′
+				pressures[i] = p.P
+				pressures_pert[i] = p.P′
+				temperatures[i] = p.T
+				pot_temperatures[i] = p.θ
+				types[i] = p.type
+			end
+
+			# 3. Write securely to HDF5
+			h5open(frame_file, "w") do file
+				# Save metadata as HDF5 attributes (keeps the dataset space clean)
+				attributes(file)["time"] = t
+				attributes(file)["frame_counter"] = frame_counter
+				attributes(file)["n_particles"] = N_parts
+
+				# Save the heavy arrays as primary datasets
+				file["positions"] = pos_matrix
+				file["velocities"] = vel_matrix
+				file["densities"] = densities
+				file["densities_pert"] = densities_pert
+				file["pressures"] = pressures
+				file["pressures_pert"] = pressures_pert
+				file["temperatures"] = temperatures
+				file["pot_temperatures"] = pot_temperatures
+				file["types"] = types
+			end
+
+			frame_counter += 1
+			# ---------------------------------------------------------
 			CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
 			CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
 			CSV.write(joinpath(run_dir, "energies.csv"), ene)
 		end
 	end
-
-	#save_pvd_file(out)
 
 	p1 = plot(
 		average_velocities.t, average_velocities.u;
