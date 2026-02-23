@@ -1,7 +1,7 @@
 # spatial and temporal resolution
 dr = [520.0]            # 26e3/25 = 1040.0, 26e3/50.0 = 520, 26e4/75 = 346.0 , 26e3/100 = 260.0
 dt_rel = [0.01]           #this will be multiplied by h0/c
-t_end  = [5.0]         
+t_end  = [1.0]         
 
 # numerics
 rho_floor = [1e-6]

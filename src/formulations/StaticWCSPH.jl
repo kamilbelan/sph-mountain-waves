@@ -372,8 +372,8 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	@show T_bg
 	@show ρ0
 	@show c
-	println("---------------------------")
 
+	println("\n" * "="^60)
 	for k = 1:nsteps
 		t = k * dt
 		verlet_step!(sys)

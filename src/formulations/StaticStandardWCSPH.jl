@@ -11,6 +11,7 @@ module StaticStandardWCSPH
 export run_sim
 
 using DrWatson
+using Dates
 @quickactivate "SPH"
 
 using Printf
@@ -373,6 +374,10 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# execution loop
 	sys = make_system()
 
+	# ==============
+	# Initialization
+	# ==============
+	
 	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
 
@@ -384,32 +389,45 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, p -> reset_acceleration!(p))
 	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 
-	run_name = savename(sim_params) # DrWatson magic 
-	run_dir = datadir("sims", run_name)
+	# ==============
+	# Output handling
+	# ==============
+	
+	# choose the parameters for the folder name
+	name_keys = [:dr, :dt_rel, :t_end, :gamma_r_rel]
+	name_params = filter(p -> p.first in name_keys, sim_params)
+	short_name = savename(name_params)
+
+	# extract model name safely 
+	model_name_str = string(sim_params[:model])
+
+	# generate a hex hash for uniqueness
+	full_hash = string(hash(sim_params), base=16)[1:6]
+	run_name = "$(short_name)_$(full_hash)"
+
+	# build the directory tree: data/sims/modelname/YYYY-MM-DD/run_name
+	date_str = Dates.format(now(), "yyyy-mm-dd")
+	run_dir = datadir("sims", model_name_str, date_str, run_name)
 	mkpath(run_dir)
 
 	println("Output directory: $run_dir")
 
-	# a great help from DrWatson with metadata processing
+	# save metadata in the run directory
 	metadata_dict = Dict(String(k) => v for (k, v) in sim_params)
-	metadata_dict["module"] = "StaticWCSPH" # add module metadata manually
+	metadata_dict["module"] = model_name_str 
 	@tagsave(joinpath(run_dir, "metadata.jld2"), metadata_dict)
 
-	# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
-	#outpath = joinpath(RESULTS_DIR, folder_name)
-	#out = new_pvd_file(outpath)
-	#save_frame!(out, sys, export_vars...)
-
+	# initialize data accumulation for diagnostics
 	average_velocities = DataFrame(t=Float64[], u=Float64[])
 	maximum_velocities = DataFrame(t=Float64[], u=Float64[])
 	ene = DataFrame(t=Float64[], E=Float64[])
 
+	# ==============
+	# Time loop
+	# ==============
 	nsteps = Int(round(t_end / dt))
 	frame_counter = 0
 
-	@show T_bg
-	@show ρ0
-	@show c
 	println("---------------------------")
 
 	for k = 1:nsteps
@@ -433,12 +451,9 @@ function run_sim(global_params::Dict, sim_params::Dict)
 			@show E
 			push!(ene, (t, E))
 
-			# ---------------------------------------------------------
-			# DATA EXPORT: HDF5 + Flattened Arrays (SoA) for ParaView
-			# ---------------------------------------------------------
 			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter, 4, '0')).h5")
 
-			# 1. Get particle count and pre-allocate flat arrays
+			# pre-allocate flat arrays
 			N_parts = length(sys.particles)
 			pos_matrix = zeros(Float64, 3, N_parts)
 			vel_matrix = zeros(Float64, 3, N_parts)
@@ -450,15 +465,14 @@ function run_sim(global_params::Dict, sim_params::Dict)
 			pot_temperatures = zeros(Float64, N_parts)
 			types = zeros(Float64, N_parts)
 
-			# 2. Single fast pass to extract Array of Structs (AoS) into Struct of Arrays (SoA)
 			@inbounds for (i, p) in enumerate(sys.particles)
 				pos_matrix[1, i] = p.x[1]
 				pos_matrix[2, i] = p.x[2]
-				pos_matrix[3, i] = 0.0  # ParaView expects 3D coordinates
+				pos_matrix[3, i] = 0.0  
 
 				vel_matrix[1, i] = p.v[1]
 				vel_matrix[2, i] = p.v[2]
-				vel_matrix[3, i] = 0.0  # ParaView expects 3D vectors
+				vel_matrix[3, i] = 0.0  
 
 				densities[i] = p.ρ
 				densities_pert[i] = p.ρ′
@@ -469,14 +483,14 @@ function run_sim(global_params::Dict, sim_params::Dict)
 				types[i] = p.type
 			end
 
-			# 3. Write securely to HDF5
+			#  write securely to HDF5
 			h5open(frame_file, "w") do file
-				# Save metadata as HDF5 attributes (keeps the dataset space clean)
+				# save metadata as HDF5 attributes 
 				attributes(file)["time"] = t
 				attributes(file)["frame_counter"] = frame_counter
 				attributes(file)["n_particles"] = N_parts
 
-				# Save the heavy arrays as primary datasets
+				# save the arrays as primary datasets
 				file["positions"] = pos_matrix
 				file["velocities"] = vel_matrix
 				file["densities"] = densities
@@ -487,45 +501,45 @@ function run_sim(global_params::Dict, sim_params::Dict)
 				file["pot_temperatures"] = pot_temperatures
 				file["types"] = types
 			end
-
 			frame_counter += 1
-			# ---------------------------------------------------------
-			CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
-			CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
-			CSV.write(joinpath(run_dir, "energies.csv"), ene)
 		end
 	end
 
+	# create a xdmf file to use with the generated h5 files
 	generate_sph_xdmf(run_dir)
 
-	p1 = plot(
-		average_velocities.t, average_velocities.u;
-		xlabel="t (s)",
-		ylabel="avg. velocity (m/s)",
-		lc=:blue,
-	)
-	p2 = plot(
-		maximum_velocities.t, maximum_velocities.u;
-		xlabel="t (s)",
-		ylabel="max. velocity (m/s)",
-		lc=:purple,
-	)
-	p3 = plot(
-		ene.t, ene.E;
-		xlabel="t (s)",
-		ylabel="Total energy J",
-		lc=:orange,)
+	# write CSVs once at the end
+	CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
+	CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
+	CSV.write(joinpath(run_dir, "energies.csv"), ene)
 
-	#savefig(joinpath(outpath,"velocities.pdf"))
+	println("Generating diagnostic plots...")
 
-	plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
+	# fallback to headless plotting if not in an interactive REPL (eg for cluster use)
+	if !isinteractive()
+		ENV["GKSwstype"] = "nul"
+	end
 
-	# save the plots for immediate diagnostics
-	savefig(plotsdir("diagnostics_$(run_name).pdf"))
+	p1 = plot(average_velocities.t, average_velocities.u; xlabel="t (s)", ylabel="avg. velocity (m/s)", lc=:blue)
+	p2 = plot(maximum_velocities.t, maximum_velocities.u; xlabel="t (s)", ylabel="max. velocity (m/s)", lc=:purple)
+	p3 = plot(ene.t, ene.E; xlabel="t (s)", ylabel="Total energy J", lc=:orange)
 
-	println("\n End of the road 🏵. \n Simulation $run_name complete. ")
-	println("\n RESULTS: $run_dir")
-	println("\n PLOTS: ", plotsdir("diagnostics_$(run_name).png"))
+	plt = plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
+
+	# display the plot if local, otherwise skip displaying on HPC
+	if isinteractive()
+		display(plt)
+	end
+
+	# save the plot into the run directory
+	savefig(plt, joinpath(run_dir, "diagnostics.pdf"))
+
+	println("\nEnd of the road 🏵.")
+	println("Simulation $run_name complete.")
+	println("All artifacts (data, plots, metadata) securely saved to:\n  $run_dir")
+
+	return run_dir
+
 end
 end # module
 
