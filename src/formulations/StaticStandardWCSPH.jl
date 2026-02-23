@@ -28,6 +28,12 @@ using LinearAlgebra
 const FLUID = 0.0
 const WALL = 1.0
 const MOUNTAIN = 2.0
+
+
+# ==============
+# INCLUDE UTILS SCRIPTS
+# ==============
+
 #include(srcdir("utils", "new_packing.jl"))
 include(srcdir("utils", "make_xdmf.jl"))
 
@@ -145,7 +151,7 @@ end
 
 
 # ==============
-# Thermodynamics (e.g determning temperature and potential temperature)
+# Thermodynamics (e.g determining temperature and potential temperature)
 # ==============
 
 @inbounds function find_temperature!(p::Particle, R_mass::Float64)

@@ -11,6 +11,7 @@ module StaticTEMPLATE
 export run_sim
 
 using DrWatson
+using Dates
 @quickactivate "SPH"
 
 using Printf
@@ -18,6 +19,8 @@ using SmoothedParticles
 using DataFrames
 using Plots
 using JLD2
+using HDF5
+using Glob
 using CSV
 using Parameters 
 using LinearAlgebra
@@ -25,7 +28,13 @@ using LinearAlgebra
 const FLUID = 0.0
 const WALL = 1.0
 const MOUNTAIN = 2.0
+
+# ==============
+# INCLUDE UTILS SCRIPTS
+# ==============
+
 #include(srcdir("utils", "new_packing.jl"))
+include(srcdir("utils", "make_xdmf.jl"))
 
 # ==============
 # PARTICLE CONSTRUCTOR
@@ -116,7 +125,7 @@ end
 
 
 # ==============
-# Thermodynamics (e.g determning temperature and potential temperature)
+# Thermodynamics (e.g determining temperature and potential temperature)
 # ==============
 
 # ==============
@@ -127,9 +136,15 @@ end
 # Additional forces: Rayleigh damping & gravity/buyoancy
 # ==============
 
-function damping_structure(z::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
-	if z >= (z_t - z_β)
-		return -γ_r * (sin(π / 2 * (1 - (z_t - z_β) / z_β)))^2 * VECY
+function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float64, γ_r::Float64)
+	z_bottom = z_t - z_β
+	if z >= z_bottom
+		ζ = (z - z_bottom) / z_β 
+
+		profile = (sin(π / 2 * ζ))^2 
+
+		# friction force
+		return -γ_r * profile * v 
 	else
 		return VEC0
 	end
@@ -161,8 +176,11 @@ end
 
 function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
 	if p.type == FLUID
-		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], z_t, z_β, γ_r)) # this is a vector sum
+		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
+end
+
+function reset_acceleration!(p::Particle)
 	p.Dv = VEC0
 end
 
@@ -239,56 +257,89 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> move!(p, dt))
 		create_cell_list!(sys)
 
-		# compute density and smoothing length
-		apply!(sys, p -> reset_density!(p))
-		apply!(sys, compute_density!)
-		apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
-		apply!(sys, p -> update_smoothing!(p, η, rho_floor))
+		# reset rates 
+		apply!(sys, p -> reset_acceleration!(p))
+		apply!(sys, p -> reset_density_rate!(p))
+		apply!(sys, p -> reset_smoothing_rate!(p))
+
+		# compute density (balance of mass) and smoothing length
+		apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
+		apply!(sys, p -> balance_of_smoothing!(p))
+		apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
+		apply!(sys, p -> compute_smoothing!(p, dt))
 		create_cell_list!(sys)
 
-		# pressure–entropy: build P̄ from A
+		# compute pressure
 		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
-		apply!(sys, p -> compute_sound_speed!(p, rho_floor, γ))
 
-		# thermodynamics from P̄ and ρ
+		# compute temperature and potential temperature
 		apply!(sys, p -> find_temperature!(p, R_mass))
 		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
 
-		# forces
+		# compute acceleration (balance of momentum)
 		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
 		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 	end
 
+
 	# execution loop
 	sys = make_system()
 
-	run_name = savename(sim_params) # DrWatson magic 
-	run_dir = datadir("sims", run_name)
+	# ==============
+	# Initialization
+	# ==============
+
+	# initialization of the pressure
+	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
+
+	# compute temperature and potential temperature
+	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+
+	# compute acceleration (balance of momentum)
+	apply!(sys, p -> reset_acceleration!(p))
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
+
+	# ==============
+	# Output handling
+	# ==============
+
+	# choose the parameters for the folder name
+	name_keys = [:dr, :dt_rel, :t_end, :gamma_r_rel]
+	name_params = filter(p -> p.first in name_keys, sim_params)
+	short_name = savename(name_params)
+
+	# extract model name safely 
+	model_name_str = string(sim_params[:model])
+
+	# generate a hex hash for uniqueness
+	full_hash = string(hash(sim_params), base=16)[1:6]
+	run_name = "$(short_name)_$(full_hash)"
+
+	# build the directory tree: data/sims/modelname/YYYY-MM-DD/run_name
+	date_str = Dates.format(now(), "yyyy-mm-dd")
+	run_dir = datadir("sims", model_name_str, date_str, run_name)
 	mkpath(run_dir)
 
 	println("Output directory: $run_dir")
 
-	# a great help from DrWatson with metadata processing
+	# save metadata in the run directory
 	metadata_dict = Dict(String(k) => v for (k, v) in sim_params)
-	metadata_dict["module"] = "StaticWCSPH" # add module metadata manually
+	metadata_dict["module"] = model_name_str 
 	@tagsave(joinpath(run_dir, "metadata.jld2"), metadata_dict)
 
-	# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
-	#outpath = joinpath(RESULTS_DIR, folder_name)
-	#out = new_pvd_file(outpath)
-	#save_frame!(out, sys, export_vars...)
-
+	# initialize data accumulation for diagnostics
 	average_velocities = DataFrame(t=Float64[], u=Float64[])
 	maximum_velocities = DataFrame(t=Float64[], u=Float64[])
 	ene = DataFrame(t=Float64[], E=Float64[])
 
+	# ==============
+	# Time loop
+	# ==============
 	nsteps = Int(round(t_end / dt))
 	frame_counter = 0
 
-	@show T_bg
-	@show ρ0
-	@show c
-	println("---------------------------")
+	println("\n" * "="^60)
 
 	for k = 1:nsteps
 		t = k * dt
@@ -311,60 +362,95 @@ function run_sim(global_params::Dict, sim_params::Dict)
 			@show E
 			push!(ene, (t, E))
 
-			# the output is saved into a jld2 file, which is more suitable for analysis (in julia) than vtk
-			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter,4,'0')).jld2")
-			jldsave(frame_file;
-	   t, frame_counter,
-	   n_particles=length(sys.particles),
-	   positions=[p.x for p in sys.particles],
-	   velocities=[p.v for p in sys.particles],
-	   densities=[p.ρ for p in sys.particles],
-	   densities_pert=[p.ρ′ for p in sys.particles],
-	   pressures=[p.P for p in sys.particles],
-	   pressures_pert=[p.P′ for p in sys.particles],
-	   temperatures=[p.T for p in sys.particles],
-	   pot_temperatures=[p.θ for p in sys.particles],
-	   types=[p.type for p in sys.particles]
-	   )
+			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter, 4, '0')).h5")
 
-			# UNCOMMENT TO SAVE VTK FRAMES FOR PARAVIEW!
-			#save_frame!(out, sys, export_vars...)
-			CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
-			CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
-			CSV.write(joinpath(run_dir, "energies.csv"), ene)
+			# pre-allocate flat arrays
+			N_parts = length(sys.particles)
+			pos_matrix = zeros(Float64, 3, N_parts)
+			vel_matrix = zeros(Float64, 3, N_parts)
+			densities = zeros(Float64, N_parts)
+			densities_pert = zeros(Float64, N_parts)
+			pressures = zeros(Float64, N_parts)
+			pressures_pert = zeros(Float64, N_parts)
+			temperatures = zeros(Float64, N_parts)
+			pot_temperatures = zeros(Float64, N_parts)
+			types = zeros(Float64, N_parts)
+
+			@inbounds for (i, p) in enumerate(sys.particles)
+				pos_matrix[1, i] = p.x[1]
+				pos_matrix[2, i] = p.x[2]
+				pos_matrix[3, i] = 0.0  
+
+				vel_matrix[1, i] = p.v[1]
+				vel_matrix[2, i] = p.v[2]
+				vel_matrix[3, i] = 0.0  
+
+				densities[i] = p.ρ
+				densities_pert[i] = p.ρ′
+				pressures[i] = p.P
+				pressures_pert[i] = p.P′
+				temperatures[i] = p.T
+				pot_temperatures[i] = p.θ
+				types[i] = p.type
+			end
+
+			#  write securely to HDF5
+			h5open(frame_file, "w") do file
+				# save metadata as HDF5 attributes 
+				attributes(file)["time"] = t
+				attributes(file)["frame_counter"] = frame_counter
+				attributes(file)["n_particles"] = N_parts
+
+				# save the arrays as primary datasets
+				file["positions"] = pos_matrix
+				file["velocities"] = vel_matrix
+				file["densities"] = densities
+				file["densities_pert"] = densities_pert
+				file["pressures"] = pressures
+				file["pressures_pert"] = pressures_pert
+				file["temperatures"] = temperatures
+				file["pot_temperatures"] = pot_temperatures
+				file["types"] = types
+			end
+			frame_counter += 1
 		end
 	end
 
-	#save_pvd_file(out)
+	# create a xdmf file to use with the generated h5 files
+	generate_sph_xdmf(run_dir)
 
-	p1 = plot(
-		average_velocities.t, average_velocities.u;
-		xlabel="t (s)",
-		ylabel="avg. velocity (m/s)",
-		lc=:blue,
-	)
-	p2 = plot(
-		maximum_velocities.t, maximum_velocities.u;
-		xlabel="t (s)",
-		ylabel="max. velocity (m/s)",
-		lc=:purple,
-	)
-	p3 = plot(
-		ene.t, ene.E;
-		xlabel="t (s)",
-		ylabel="Total energy J",
-		lc=:orange,)
+	# write CSVs once at the end
+	CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
+	CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
+	CSV.write(joinpath(run_dir, "energies.csv"), ene)
 
-	#savefig(joinpath(outpath,"velocities.pdf"))
+	println("Generating diagnostic plots...")
 
-	plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
+	# fallback to headless plotting if not in an interactive REPL (eg for cluster use)
+	if !isinteractive()
+		ENV["GKSwstype"] = "nul"
+	end
 
-	# save the plots for immediate diagnostics
-	savefig(plotsdir("diagnostics_$(run_name).pdf"))
+	p1 = plot(average_velocities.t, average_velocities.u; xlabel="t (s)", ylabel="avg. velocity (m/s)", lc=:blue)
+	p2 = plot(maximum_velocities.t, maximum_velocities.u; xlabel="t (s)", ylabel="max. velocity (m/s)", lc=:purple)
+	p3 = plot(ene.t, ene.E; xlabel="t (s)", ylabel="Total energy J", lc=:orange)
 
-	println("\n End of the road 🏵. \n Simulation $run_name complete. ")
-	println("\n RESULTS: $run_dir")
-	println("\n PLOTS: ", plotsdir("diagnostics_$(run_name).png"))
+	plt = plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
+
+	# display the plot if local, otherwise skip displaying on HPC
+	if isinteractive()
+		display(plt)
+	end
+
+	# save the plot into the run directory
+	savefig(plt, joinpath(run_dir, "diagnostics.pdf"))
+
+	println("\nEnd of the road 🏵.")
+	println("Simulation $run_name complete.")
+	println("All artifacts (data, plots, metadata) securely saved to:\n  $run_dir")
+
+	return run_dir
+
 end
 end # module
 
