@@ -19,6 +19,7 @@ using DataFrames
 using Plots
 using JLD2
 using HDF5
+using Glob
 using CSV
 using Parameters 
 using LinearAlgebra
@@ -27,6 +28,7 @@ const FLUID = 0.0
 const WALL = 1.0
 const MOUNTAIN = 2.0
 #include(srcdir("utils", "new_packing.jl"))
+include(srcdir("utils", "make_xdmf.jl"))
 
 # ==============
 # PARTICLE CONSTRUCTOR
@@ -493,6 +495,8 @@ function run_sim(global_params::Dict, sim_params::Dict)
 			CSV.write(joinpath(run_dir, "energies.csv"), ene)
 		end
 	end
+
+	generate_sph_xdmf(run_dir)
 
 	p1 = plot(
 		average_velocities.t, average_velocities.u;
