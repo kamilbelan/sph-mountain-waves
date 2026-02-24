@@ -31,11 +31,19 @@ const MOUNTAIN = 2.0
 
 
 # ==============
+# INCLUDE CORE SCRIPTS
+# ==============
+
+include(srcdir("core", "domain.jl"))
+include(srcdir("core", "diagnostics.jl"))
+include(srcdir("core", "time_loop.jl"))
+include(srcdir("io", "data_storage.jl"))
+
+# ==============
 # INCLUDE UTILS SCRIPTS
 # ==============
 
 #include(srcdir("utils", "new_packing.jl"))
-include(srcdir("utils", "make_xdmf.jl"))
 
 # ==============
 # PARTICLE CONSTRUCTOR
@@ -281,29 +289,48 @@ function reset_acceleration!(p::Particle)
 end
 
 # ==============
-# Diagnostics
+# Verlet step
 # ==============
+function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict )
+	# unpack all parameters
+	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
+	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
+	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
-function avg_velocity(sys::ParticleSystem)::Float64
-	v = 0.0
-	for p in sys.particles
-		v += SmoothedParticles.norm(p.v)
-	end
-	v = v / length(sys.particles)
-	return v
-end
+	# compute derived parameters
+	h0 = η * dr
+	c = sqrt(65e3 * (γ) / ρ0)
+	dt = dt_rel * h0 / c
+	γ_r = γ_r_rel * N
 
-function max_velocity(sys::ParticleSystem)::Float64
-	v = maximum(SmoothedParticles.norm(p.v) for p in sys.particles)
-	return v
-end
+	# half-step acceleration & drift
+	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
+	apply!(sys, p -> move!(p, dt))
+	create_cell_list!(sys)
 
-function energy(sys::ParticleSystem, g::Float64)::Float64
-	E = 0.0
-	for p in sys.particles
-		E += 0.5 * p.ρ * SmoothedParticles.dot(p.v, p.v) + p.ρ * g * p.x[2]
-	end
-	return E
+	# reset rates 
+	apply!(sys, p -> reset_acceleration!(p))
+	apply!(sys, p -> reset_density_rate!(p))
+	apply!(sys, p -> reset_smoothing_rate!(p))
+
+	# compute density (balance of mass) and smoothing length
+	apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
+	apply!(sys, p -> balance_of_smoothing!(p))
+	apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
+	apply!(sys, p -> compute_smoothing!(p, dt))
+	create_cell_list!(sys)
+
+	# compute pressure
+	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
+
+	# compute temperature and potential temperature
+	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+
+	# compute acceleration (balance of momentum)
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
+	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 end
 
 
@@ -312,6 +339,10 @@ end
 # ==============
 
 function run_sim(global_params::Dict, sim_params::Dict)
+	# ==============
+	# Parameters initialization
+	# ==============
+	
 	# unpack all parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
@@ -326,62 +357,11 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	dt_frame = t_end / 100
 	γ_r = γ_r_rel * N
 
-	# system construction 
-	function make_system()
-		grid = Grid(dr, :hexagonal)
-		domain = Rectangle(-dom_length / 2.0, 0.0, dom_length / 2.0, dom_height)
-		fence = BoundaryLayer(domain, grid, bc_width)
-		witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
-		mountain = Specification(domain, x -> (x[2] <= witch_profile(x[1])))
-
-		sys = ParticleSystem(Particle, domain + fence, h0)
-		# passing params to the Particle constructor
-		generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
-		generate_particles!(sys, grid, fence, x -> Particle(x, VEC0, WALL, global_params, sim_params))
-		generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
-
-		create_cell_list!(sys)
-		return sys
-	end
+	# create the particle system
+	sys = make_system(Particle, global_params, sim_params)
 
 	# ==============
-	# Verlet step
-	# ==============
-	function verlet_step!(sys)
-		# half-step acceleration & drift
-		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
-		apply!(sys, p -> move!(p, dt))
-		create_cell_list!(sys)
-
-		# reset rates 
-		apply!(sys, p -> reset_acceleration!(p))
-		apply!(sys, p -> reset_density_rate!(p))
-		apply!(sys, p -> reset_smoothing_rate!(p))
-
-		# compute density (balance of mass) and smoothing length
-		apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
-		apply!(sys, p -> balance_of_smoothing!(p))
-		apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
-		apply!(sys, p -> compute_smoothing!(p, dt))
-		create_cell_list!(sys)
-
-		# compute pressure
-		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
-
-		# compute temperature and potential temperature
-		apply!(sys, p -> find_temperature!(p, R_mass))
-		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
-
-		# compute acceleration (balance of momentum)
-		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
-		apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
-	end
-
-	# execution loop
-	sys = make_system()
-
-	# ==============
-	# Initialization
+	# Initialization of the physical fields
 	# ==============
 	
 	# initialization of the pressure
@@ -399,153 +379,33 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# Output handling
 	# ==============
 	
-	# choose the parameters for the folder name
-	name_keys = [:dr, :dt_rel, :t_end, :gamma_r_rel]
-	name_params = filter(p -> p.first in name_keys, sim_params)
-	short_name = savename(name_params)
-
-	# extract model name safely 
-	model_name_str = string(sim_params[:model])
-
-	# generate a hex hash for uniqueness
-	full_hash = string(hash(sim_params), base=16)[1:6]
-	run_name = "$(short_name)_$(full_hash)"
-
-	# build the directory tree: data/sims/modelname/YYYY-MM-DD/run_name
-	date_str = Dates.format(now(), "yyyy-mm-dd")
-	run_dir = datadir("sims", model_name_str, date_str, run_name)
-	mkpath(run_dir)
-
-	println("Output directory: $run_dir")
-
-	# save metadata in the run directory
-	metadata_dict = Dict(String(k) => v for (k, v) in sim_params)
-	metadata_dict["module"] = model_name_str 
-	@tagsave(joinpath(run_dir, "metadata.jld2"), metadata_dict)
+	# initialize simulation output directory with metadata
+	run_dir = initialize_run_directory(sim_params)
 
 	# initialize data accumulation for diagnostics
-	average_velocities = DataFrame(t=Float64[], u=Float64[])
-	maximum_velocities = DataFrame(t=Float64[], u=Float64[])
-	ene = DataFrame(t=Float64[], E=Float64[])
+	average_velocities, maximum_velocities, energies = initialize_diagnostics_arrays()
 
 	# ==============
 	# Time loop
 	# ==============
-	nsteps = Int(round(t_end / dt))
-	frame_counter = 0
+	
+	# use the chosen verlet_step! to advance in time
+	step_function!(sys) = verlet_step!(sys, global_params, sim_params)
 
-	println("---------------------------")
-
-	for k = 1:nsteps
-		t = k * dt
-		verlet_step!(sys)
-
-		save_interval = max(1, Int(round(dt_frame / dt)))
-		if k % save_interval == 0
-			@show t
-			println("num. of particles = ", length(sys.particles))
-
-			u_avg = avg_velocity(sys)
-			@show u_avg
-			push!(average_velocities, (t, u_avg))
-
-			u_max = max_velocity(sys)
-			@show u_max
-			push!(maximum_velocities, (t, u_max))
-
-			E = energy(sys, g)
-			@show E
-			push!(ene, (t, E))
-
-			frame_file = joinpath(run_dir, "frame_$(lpad(frame_counter, 4, '0')).h5")
-
-			# pre-allocate flat arrays
-			N_parts = length(sys.particles)
-			pos_matrix = zeros(Float64, 3, N_parts)
-			vel_matrix = zeros(Float64, 3, N_parts)
-			densities = zeros(Float64, N_parts)
-			densities_pert = zeros(Float64, N_parts)
-			pressures = zeros(Float64, N_parts)
-			pressures_pert = zeros(Float64, N_parts)
-			temperatures = zeros(Float64, N_parts)
-			pot_temperatures = zeros(Float64, N_parts)
-			types = zeros(Float64, N_parts)
-
-			@inbounds for (i, p) in enumerate(sys.particles)
-				pos_matrix[1, i] = p.x[1]
-				pos_matrix[2, i] = p.x[2]
-				pos_matrix[3, i] = 0.0  
-
-				vel_matrix[1, i] = p.v[1]
-				vel_matrix[2, i] = p.v[2]
-				vel_matrix[3, i] = 0.0  
-
-				densities[i] = p.ρ
-				densities_pert[i] = p.ρ′
-				pressures[i] = p.P
-				pressures_pert[i] = p.P′
-				temperatures[i] = p.T
-				pot_temperatures[i] = p.θ
-				types[i] = p.type
-			end
-
-			#  write securely to HDF5
-			h5open(frame_file, "w") do file
-				# save metadata as HDF5 attributes 
-				attributes(file)["time"] = t
-				attributes(file)["frame_counter"] = frame_counter
-				attributes(file)["n_particles"] = N_parts
-
-				# save the arrays as primary datasets
-				file["positions"] = pos_matrix
-				file["velocities"] = vel_matrix
-				file["densities"] = densities
-				file["densities_pert"] = densities_pert
-				file["pressures"] = pressures
-				file["pressures_pert"] = pressures_pert
-				file["temperatures"] = temperatures
-				file["pot_temperatures"] = pot_temperatures
-				file["types"] = types
-			end
-			frame_counter += 1
-		end
-	end
+	# iterate in time
+	time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys, average_velocities, maximum_velocities, energies)
 
 	# create a xdmf file to use with the generated h5 files
 	generate_sph_xdmf(run_dir)
 
-	# write CSVs once at the end
-	CSV.write(joinpath(run_dir, "average_velocities.csv"), average_velocities)
-	CSV.write(joinpath(run_dir, "maximum_velocities.csv"), maximum_velocities)
-	CSV.write(joinpath(run_dir, "energies.csv"), ene)
-
-	println("Generating diagnostic plots...")
-
-	# fallback to headless plotting if not in an interactive REPL (eg for cluster use)
-	if !isinteractive()
-		ENV["GKSwstype"] = "nul"
-	end
-
-	p1 = plot(average_velocities.t, average_velocities.u; xlabel="t (s)", ylabel="avg. velocity (m/s)", lc=:blue)
-	p2 = plot(maximum_velocities.t, maximum_velocities.u; xlabel="t (s)", ylabel="max. velocity (m/s)", lc=:purple)
-	p3 = plot(ene.t, ene.E; xlabel="t (s)", ylabel="Total energy J", lc=:orange)
-
-	plt = plot(p1, p2, p3; layout=(3, 1), size=(800, 900))
-
-	# display the plot if local, otherwise skip displaying on HPC
-	if isinteractive()
-		display(plt)
-	end
-
-	# save the plot into the run directory
-	savefig(plt, joinpath(run_dir, "diagnostics.pdf"))
+	# write CSVs once at the end, create diagnostic plots
+	finalize_diagnostics(run_dir, average_velocities, maximum_velocities, energies)
 
 	println("\nEnd of the road 🏵.")
-	println("Simulation $run_name complete.")
+	println("Simulation $(basename(run_dir)) complete.")
 	println("All artifacts (data, plots, metadata) securely saved to:\n  $run_dir")
 
 	return run_dir
-
 end
 end # module
 
