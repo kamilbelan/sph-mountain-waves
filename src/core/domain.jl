@@ -1,6 +1,11 @@
 using SmoothedParticles
 using Parameters
 
+"""
+    make_system(Particle::Type, global_params::Dict, sim_params::Dict)
+
+Creates the system's geometry and places particles of type `Particle in the positions.
+"""
 function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 		# unpack needed parameters
 		@unpack dom_height, dom_length, h_m, a = global_params
