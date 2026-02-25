@@ -232,7 +232,18 @@ end
 # ==============
 
 function verlet_step!(sys, global_params, sim_params)
+	# unpack all parameters
+	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
+	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
+	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
+	# compute derived parameters
+	h0 = η * dr
+	c = sqrt(65e3 * (γ) / ρ0)
+	dt = dt_rel * h0 / c
+	γ_r = γ_r_rel * N
+	
 end
 
 # ==============
