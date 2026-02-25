@@ -60,6 +60,8 @@ mutable struct Particle <: AbstractParticle
 	ρ′::Float64       # density perturbation
 	ρ::Float64        # total density
 	Dρ::Float64       # density rate
+	n::Float64        # number density
+	Omega::Float64    # ∇h correction factor
 	P_bg::Float64     # background pressure
 	P′::Float64       # pressure perturbation
 	P::Float64        # total pressure
@@ -94,6 +96,8 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # ρ′
 			0.0,            # ρ
 			0.0,            # Dρ
+			0.0,            # n
+			0.0,            # Omega 
 			0.0,            # P_bg
 			0.0,            # P′
 			0.0,            # P
@@ -124,7 +128,7 @@ mutable struct Particle <: AbstractParticle
 		obj.P = obj.P′ + obj.P_bg
 		obj.θ = obj.θ′ + obj.θ_bg
 
-		obj.m = obj.ρ * dr^2
+		obj.m = ρ0 * dr^2
 		obj.A = obj.P / obj.ρ^γ
 
 		return obj
@@ -165,7 +169,7 @@ end
 end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
-	ker = wendland2(0.5 * (p.h + q.h), r)
+	ker = wendland2(p.h, r)
 	p.P += q.m * q.A^(1 / γ) * ker
 end
 
@@ -174,7 +178,6 @@ end
 	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
 	p.P′ = p.P - p.P_bg
 end
-
 
 # ==============
 # Thermodynamics (e.g determining temperature and potential temperature)
@@ -191,14 +194,15 @@ end
 	p.θ′ = p.θ - p.θ_bg
 end
 
-
 # ==============
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function update_smoothing!(p::Particle, η::Float64, rho_floor::Float64)
-	rho = max(p.ρ, rho_floor)
-	p.h = η * sqrt(p.m / rho)
+@inbounds function update_smoothing!(p::Particle, η::Float64)
+	omega = max(p.Omega, 0.01)
+	# Newton iteration to find the suitable h_new
+	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
+	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
 end
 
 # ==============
@@ -238,22 +242,13 @@ end
 	expfac = 1.0 - 2.0 / γ
 	ker_i = rDwendland2(p.h, r)
 	ker_j = rDwendland2(q.h, r)
+	f_i = 1.0 / p.Omega
+	f_j = 1.0 / q.Omega
 	pP = max(P_floor, p.P)
 	qP = max(P_floor, q.P)
 
-	# acceleration due the gradient of total pressure
-	a_tot = -prefac * (pP^expfac * ker_i + qP^expfac * ker_j) * x_pq
-
-	prefac_bg = q.m * (p.A_bg * q.A_bg)^(1 / γ)
-	pP_bg = max(P_floor, p.P_bg)
-	qP_bg = max(P_floor, q.P_bg)
-
-	# acceleration due to the gradient of background pressure
-	a_bg = -prefac_bg * (pP_bg^expfac * ker_i + qP_bg^expfac * ker_j) * x_pq
-
-	# total acceleration
-	p.Dv += a_tot - a_bg
-
+	# pairwise conservative force
+	p.Dv += -prefac * (f_i * pP^expfac * ker_i + f_j * qP^expfac * ker_j) * x_pq
 
 	# artificial viscous force
 	if dot_product < 0.0
@@ -272,6 +267,7 @@ end
 		p.Dv += -q.m * π_ij * ker_ij * x_pq
 	end
 end
+
 
 # ==============
 # Mass balance 
@@ -292,6 +288,23 @@ end
 	p.ρ′ = p.ρ - p.ρ_bg
 end
 
+# ==============
+# Number density
+# ==============
+
+@inbounds function reset_number_density!(p::Particle)
+	p.n = wendland2(p.h, 0.0)
+	p.Omega = 0.0
+end
+
+@inbounds function compute_number_density!(p::Particle, q::Particle, r::Float64)
+	p.n += wendland2(p.h, r)
+	p.Omega += -0.5 * r^2 * rDwendland2(p.h, r) # derived through chain rule
+end
+
+@inbounds function finalize_number_density!(p::Particle)
+	p.Omega = 1.0 + (p.Omega / p.n)
+end
 
 # ==============
 # Move & accelerate
@@ -335,12 +348,24 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> move!(p, dt))
 	create_cell_list!(sys)
 
+	# set the number density and adjust the smoothing length accordingly
+	max_iter = 3
+	for iter in 1:max_iter
+		apply!(sys, p -> reset_number_density!(p))
+		apply!(sys, (p, q, r) -> compute_number_density!(p, q, r))
+		apply!(sys, p -> finalize_number_density!(p))
+
+		# we in fact do not need the last values, since they will be taken into the balance of momentum
+		if iter < max_iter
+			apply!(sys, p -> update_smoothing!(p, η))
+			create_cell_list!(sys)
+		end
+	end
+
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, compute_density!)
 	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
-	apply!(sys, p -> update_smoothing!(p, η, rho_floor))
-	create_cell_list!(sys)
 	
 	# compute pressure
 	apply!(sys, reset_pressure!)
@@ -384,6 +409,24 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Initialization of the physical fields
 	# ==============
+	
+	# initialize the number density and the smoothing length
+	max_iter = 3
+	for iter in 1:max_iter
+		apply!(sys, p -> reset_number_density!(p))
+		apply!(sys, (p, q, r) -> compute_number_density!(p, q, r))
+		apply!(sys, p -> finalize_number_density!(p))
+
+		if iter < max_iter
+			apply!(sys, p -> update_smoothing!(p, η))
+			create_cell_list!(sys)
+		end
+	end
+
+	# initialize the density
+	apply!(sys, p -> reset_density!(p))
+	apply!(sys, compute_density!)
+	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
 
 	# initialization of the pressure
 	apply!(sys, p -> reset_pressure!(p))

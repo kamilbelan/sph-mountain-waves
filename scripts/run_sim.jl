@@ -139,7 +139,7 @@ for model_name in model_list
 	println("=== LOADING MODEL: $model_name")
 	println("="^60)
 	# routing to the model source code
-	model_path = srcdir("formulations", "$(model_name).jl")
+	model_path = srcdir("formulations", "static", "$(model_name).jl")
 	if !isfile(model_path)
 		println("     Warning: Model file '$model_path' not found.")
 		exit(1)
