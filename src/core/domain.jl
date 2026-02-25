@@ -1,6 +1,57 @@
 using SmoothedParticles
 using Parameters
 
+import SmoothedParticles: Grid2, covering, is_inside, boundarybox, RealVector, Shape
+
+
+"""
+    ExpGrid(dr, K)
+
+Creates an isotropically spaced grid whose spacing decays exponentially.
+"""
+mutable struct ExpGrid <: Grid2
+	dr::Float64
+	K::Float64
+end
+
+function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
+        rect = boundarybox(s)
+        dr_base = grid.dr
+        K = grid.K
+        
+        xs = RealVector[]
+        
+        # begin at the bottom of the boundary
+        y = rect.x2_min
+        layer_idx = 0
+        
+        while y <= rect.x2_max
+                # to maintain isotropic area density, the spacing needs to scale as as exp(Ky/2)
+                s_local = dr_base * exp(K * y / 2.0)
+                
+                # find the bounds bounds for this specific layer's spacing
+                i_min = Int(floor(rect.x1_min / s_local))
+                i_max = Int(ceil(rect.x1_max / s_local))
+                
+                # stagger every other row to form a more stable grid
+                offset = (layer_idx % 2 == 0) ? 0.0 : 0.5 * s_local
+                
+                for i in i_min:i_max
+                        x_coord = (i * s_local) + offset
+                        pos = RealVector(x_coord, y, 0.0)
+                        if is_inside(pos, s)
+                                push!(xs, pos)
+                        end
+                end
+                
+                y += s_local
+                layer_idx += 1
+        end
+        
+        return xs
+end
+
+
 """
     make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
@@ -8,13 +59,18 @@ Creates the system's geometry and places particles of type `Particle in the posi
 """
 function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 		# unpack needed parameters
+
 		@unpack dom_height, dom_length, h_m, a = global_params
 		@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+		@unpack g, R_mass, T_bg = sim_params
 
+		K = g / (R_mass * T_bg)
 		h0 = η * dr
 		bc_width = 6*dr
 
-		grid = Grid(dr, :hexagonal)
+		# place the particles into ExpGrid
+		grid = ExpGrid(dr, K)
+
 		domain = Rectangle(-dom_length / 2.0, 0.0, dom_length / 2.0, dom_height)
 		fence = BoundaryLayer(domain, grid, bc_width)
 		witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
@@ -29,6 +85,6 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 		create_cell_list!(sys)
 		return sys
-	end
+end
 
 
