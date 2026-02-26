@@ -98,7 +98,7 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 	K = g / (R_mass * T_bg)
 	h0 = η * dr
-	bc_width = 6*dr
+	bc_width = 12 * dr 
 
 	# place the particles into ExpGrid
 	grid = ExpGrid(dr, K)
