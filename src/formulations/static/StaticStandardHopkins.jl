@@ -366,7 +366,6 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, compute_density!)
 	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
-	
 	# compute pressure
 	apply!(sys, reset_pressure!)
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
@@ -427,7 +426,6 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, compute_density!)
 	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
-
 	# initialization of the pressure
 	apply!(sys, p -> reset_pressure!(p))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))

@@ -164,9 +164,10 @@ end
 # Pressure computation (e.g followed by sound speed computation)
 # ==============
 
-@inbounds function reset_pressure!(p::Particle)
-        p.P = 0.0
-        p.P_bg = 0.0
+@inbounds function reset_pressure!(p::Particle, γ::Float64)
+	ker_self = wendland2(p.h, 0.0)
+        p.P += p.m * p.A^(1 / γ) * ker_self
+        p.P_bg += p.m * p.A_bg^(1 / γ) * ker_self
 end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
@@ -202,11 +203,12 @@ end
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function update_smoothing!(p::Particle, η::Float64)
+@inbounds function update_smoothing!(p::Particle, η::Float64, h0::Float64)
 	omega = max(p.Omega, 0.01)
 	# Newton iteration to find the suitable h_new
 	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
 	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
+	p.h = min(p.h, 3 * h0)
 end
 
 # ==============
@@ -227,9 +229,13 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 	end
 end
 
-function buyoancy_force(p::Particle, g::Float64, γ::Float64)
+function buyoancy_force(p::Particle, g::Float64, γ::Float64, P_floor::Float64)
+	# safety floor
+	pP = max(p.P, P_floor)
+	pP_bg = max(p.P_bg, P_floor)
+	
 	# we write ρ = (P/A)^(1/γ)
-	ratio = (p.P_bg / p.P) * (p.A / p.A_bg)
+	ratio = (pP_bg / pP) * (p.A / p.A_bg)
 	f_b = -g * VECY * (1.0 - ratio^( 1.0 / γ))
 	return f_b
 end
@@ -280,7 +286,7 @@ end
 		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
 
 		# artificial viscous force
-		p.Dv += -q.m * π_ij * ker_ij * x_pq
+		#p.Dv += -q.m * π_ij * ker_ij * x_pq
 	end
 end
 
@@ -289,7 +295,7 @@ end
 # ==============
 
 @inbounds function reset_density!(p::Particle)
-	p.ρ = 0.0
+	p.ρ = p.m * wendland2(p.h, 0.0)
 end
 
 @inbounds function compute_density!(p::Particle, q::Particle, r::Float64)
@@ -325,9 +331,9 @@ function move!(p::Particle, dt::Float64)
 	end
 end
 
-function accelerate!(p::Particle, dt::Float64, g::Float64, γ::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
+function accelerate!(p::Particle, dt::Float64, g::Float64, γ::Float64, z_t::Float64, z_β::Float64, γ_r::Float64, P_floor)
 	if p.type == FLUID
-		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g, γ) + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
+		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g, γ, P_floor) + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
 end
 
@@ -353,7 +359,7 @@ function verlet_step!(sys, global_params, sim_params)
 	γ_r = γ_r_rel * N
 	
 	# half-step acceleration & drift
-	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r))
+	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
 	apply!(sys, p -> move!(p, dt))
 	create_cell_list!(sys)
 
@@ -366,7 +372,7 @@ function verlet_step!(sys, global_params, sim_params)
 		
 		# we in fact do not need the last values, since they will be taken into the balance of momentum
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h0))
 			create_cell_list!(sys)
 		end
 	end
@@ -376,7 +382,7 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, compute_density!)
 	
 	# compute pressure
-	apply!(sys, reset_pressure!)
+	apply!(sys, p -> reset_pressure!(p, γ))
 	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ))
@@ -387,8 +393,8 @@ function verlet_step!(sys, global_params, sim_params)
 
 	# compute the forces
 	apply!(sys, p -> reset_acceleration!)
-	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ ))
-	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r))
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ))
+	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
 end
 
 # ==============
@@ -427,7 +433,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> finalize_number_density!(p))
 
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h0))
 			create_cell_list!(sys)
 		end
 	end
@@ -437,7 +443,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, compute_density!)
 
 	# initialization of the pressure
-	apply!(sys, p -> reset_pressure!(p))
+	apply!(sys, p -> reset_pressure!(p, γ))
 	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ))
