@@ -18,21 +18,32 @@ function initialize_run_directory(sim_params::Dict)::String
 	# choose the parameters for the folder name
 	name_keys = [:dr, :dt_rel, :t_end, :gamma_r_rel]
 	name_params = filter(p -> p.first in name_keys, sim_params)
-	short_name = savename(name_params)
 
 	# extract model name safely 
 	model_name_str = string(sim_params[:model])
 
-	# generate a hex hash for uniqueness
-	full_hash = string(hash(sim_params), base=16)[1:6]
-	run_name = "$(short_name)_$(full_hash)"
+	# generate a time prefix for uniqueness 
+        time_prefix = Dates.format(now(), "HHMMSS")
+
+	# use a convenient name
+	run_name = "$(time_prefix)_$(savename(name_params))"
 
 	# build the directory tree: data/sims/modelname/YYYY-MM-DD/run_name
 	date_str = Dates.format(now(), "yyyy-mm-dd")
-	run_dir = datadir("sims", model_name_str, date_str, run_name)
+	model_dir = datadir("sims", model_name_str)
+	run_dir = joinpath(model_dir, date_str, run_name)
 	mkpath(run_dir)
 
 	println("Output directory: $run_dir")
+
+	# create a comfortable symlink to the latest results
+	latest_link = joinpath(model_dir, "latest")
+
+	# remove the old symlink
+	rm(latest_link, force=true)
+
+	symlink(run_dir, latest_link)
+	println("symlink created: $latest_link -> $run_dir")
 
 	# save metadata in the run directory
 	metadata_dict = Dict(String(k) => v for (k, v) in sim_params)
