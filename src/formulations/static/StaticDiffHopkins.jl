@@ -237,7 +237,8 @@ function buyoancy_force(p::Particle, g::Float64, γ::Float64, P_floor::Float64)
 	# we write ρ = (P/A)^(1/γ)
 	ratio = (pP_bg / pP) * (p.A / p.A_bg)
 	f_b = -g * VECY * (1.0 - ratio^( 1.0 / γ))
-	return f_b
+	#return f_b
+	return VEC0
 end
 
 
