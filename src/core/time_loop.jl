@@ -35,6 +35,10 @@ function time_loop(global_params::Dict,
 
 	println("\n" * "="^60)
 
+	# save the initial frame
+	t = 0.0
+	write_frame!(run_dir, sys, frame_counter, t)
+
 	for k = 1:nsteps
 		t = k * dt
 		step_function!(sys)
