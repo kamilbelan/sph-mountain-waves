@@ -60,6 +60,8 @@ mutable struct Particle <: AbstractParticle
 	ρ′::Float64       # density perturbation
 	ρ::Float64        # total density
 	Dρ::Float64       # density rate
+	n::Float64        # number density
+	Omega::Float64    # ∇h correction factor
 	P_bg::Float64     # background pressure
 	P′::Float64       # pressure perturbation
 	P::Float64        # total pressure
@@ -92,6 +94,8 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # ρ′
 			0.0,            # ρ
 			0.0,            # Dρ
+			0.0,            # n
+			0.0,            # Omega
 			0.0,            # P_bg
 			0.0,            # P′
 			0.0,            # P
@@ -107,7 +111,7 @@ mutable struct Particle <: AbstractParticle
 
 		# initialization
 		obj.T_bg = T_bg
-		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
+		obj.ρ_bg = 0.0 # needs SPH sum!
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 
@@ -157,19 +161,13 @@ end
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function balance_of_smoothing!(p::Particle)
-	p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
+@inbounds function update_smoothing!(p::Particle, η::Float64, h0::Float64)
+	omega = max(p.Omega, 0.01)
+	# Newton iteration to find the suitable h_new
+	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
+	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
+	p.h = min(p.h, 3 * h0) # precaution for massive expansion
 end
-
-@inbounds function compute_smoothing!(p::Particle, dt::Float64)
-	p.h += p.Dh * dt
-
-end
-
-@inbounds function reset_smoothing_rate!(p::Particle)
-	p.Dh = 0.0
-end
-
 
 # ==============
 # Additional forces: Rayleigh damping & gravity/buyoancy
@@ -190,7 +188,7 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 end
 
 function buyoancy_force(p::Particle, g::Float64)
-	return -g * VECY * p.ρ′ / p.ρ # the (density) of gravity is - g * VECY
+	return -g * VECY 
 
 end
 
