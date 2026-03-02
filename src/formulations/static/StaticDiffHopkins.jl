@@ -166,8 +166,8 @@ end
 
 @inbounds function reset_pressure!(p::Particle, γ::Float64)
 	ker_self = wendland2(p.h, 0.0)
-        p.P += p.m * p.A^(1 / γ) * ker_self
-        p.P_bg += p.m * p.A_bg^(1 / γ) * ker_self
+        p.P = p.m * p.A^(1 / γ) * ker_self
+        p.P_bg = p.m * p.A_bg^(1 / γ) * ker_self
 end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
@@ -208,7 +208,7 @@ end
 	# Newton iteration to find the suitable h_new
 	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
 	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
-	p.h = min(p.h, 3 * h0)
+	p.h = min(p.h, 3 * h0) # precaution for massive expansion
 end
 
 # ==============
@@ -287,7 +287,7 @@ end
 		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
 
 		# artificial viscous force
-		#p.Dv += -q.m * π_ij * ker_ij * x_pq
+		p.Dv += -q.m * π_ij * ker_ij * x_pq
 	end
 end
 
@@ -296,7 +296,8 @@ end
 # ==============
 
 @inbounds function reset_density!(p::Particle)
-	p.ρ = p.m * wendland2(p.h, 0.0)
+	ker_self = wendland2(p.h, 0.0)
+	p.ρ = p.m * ker_self
 end
 
 @inbounds function compute_density!(p::Particle, q::Particle, r::Float64)
@@ -380,7 +381,7 @@ function verlet_step!(sys, global_params, sim_params)
 	
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
-	apply!(sys, compute_density!)
+	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 	
 	# compute pressure
 	apply!(sys, p -> reset_pressure!(p, γ))
