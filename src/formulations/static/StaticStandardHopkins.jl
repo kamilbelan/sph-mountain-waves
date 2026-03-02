@@ -110,10 +110,9 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # T
 			type,           # type
 		)
-
 		# initialization
 		obj.T_bg = T_bg
-		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
+		obj.ρ_bg = 0.0 # needs SPH sum!
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 
@@ -163,9 +162,9 @@ end
 # Pressure computation (e.g followed by sound speed computation)
 # ==============
 
-@inbounds function reset_pressure!(p::Particle)
-	p.P = 0.0
-	p.P′ = 0.0 #this should not be necessary; robustness precaution
+@inbounds function reset_pressure!(p::Particle, γ::Float64)
+	ker_self = wendland2(p.h, 0.0)
+	p.P += p.m * p.A^(1 / γ) * ker_self
 end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
@@ -173,10 +172,8 @@ end
 	p.P += q.m * q.A^(1 / γ) * ker
 end
 
-@inbounds function finalize_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, γ::Float64)
+@inbounds function finalize_pressure!(p::Particle, γ::Float64)
 	p.P = p.P^γ
-	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
-	p.P′ = p.P - p.P_bg
 end
 
 # ==============
@@ -198,11 +195,12 @@ end
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function update_smoothing!(p::Particle, η::Float64)
+@inbounds function update_smoothing!(p::Particle, η::Float64, h0::Float64)
 	omega = max(p.Omega, 0.01)
 	# Newton iteration to find the suitable h_new
 	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
 	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
+	p.h = min(p.h, 3 * h0) # precaution for massive expansion
 end
 
 # ==============
@@ -274,18 +272,13 @@ end
 # ==============
 
 @inbounds function reset_density!(p::Particle)
-	p.ρ = 0.0
-	p.ρ′ = 0.0 # this should not be necessary; robustness precaution
+	ker_self = wendland2(p.h, 0.0)
+	p.ρ = p.m * ker_self 
 end
 
 
 @inbounds function compute_density!(p::Particle, q::Particle, r::Float64)
 	p.ρ += q.m * wendland2(p.h, r)
-end
-
-@inbounds function finalize_density!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
-	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-	p.ρ′ = p.ρ - p.ρ_bg
 end
 
 # ==============
@@ -357,19 +350,18 @@ function verlet_step!(sys, global_params, sim_params)
 
 		# we in fact do not need the last values, since they will be taken into the balance of momentum
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h0))
 			create_cell_list!(sys)
 		end
 	end
 
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
-	apply!(sys, compute_density!)
-	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
+	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 	# compute pressure
-	apply!(sys, reset_pressure!)
+	apply!(sys, p -> reset_pressure!(p, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
-	apply!(sys, p -> finalize_pressure!(p, ρ0, T_bg, g, R_mass, γ))
+	apply!(sys, p -> finalize_pressure!(p, γ))
 
 	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
@@ -417,7 +409,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> finalize_number_density!(p))
 
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h0))
 			create_cell_list!(sys)
 		end
 	end
@@ -425,11 +417,11 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# initialize the density
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, compute_density!)
-	apply!(sys, p -> finalize_density!(p, ρ0, T_bg, g, R_mass))
+	
 	# initialization of the pressure
-	apply!(sys, p -> reset_pressure!(p))
+	apply!(sys, p -> reset_pressure!(p, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
-	apply!(sys, p -> finalize_pressure!(p, ρ0, T_bg, g, R_mass, γ))
+	apply!(sys, p -> finalize_pressure!(p, γ))
 
 	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
