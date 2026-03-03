@@ -18,8 +18,9 @@ gamma_r_rel = [5.0]        # this will be multiplied by N = sqrt(0.0196)
 #    StaticWCSPHHopkins
 #    StaticStandardHopkins
 #    StaticDiffHopkins
+#    StaticDiffPThetaHopkins
  
-formulation = ["StaticStandardWCSPH"]
+formulation = ["StaticDiffPThetaHopkins"]
 
 
 
