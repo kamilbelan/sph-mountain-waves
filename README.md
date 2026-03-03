@@ -29,4 +29,26 @@ using DrWatson
 ```
 which auto-activate the project and enable local path handling from DrWatson.
 
+# Running the simulations
+
+To run the simulations, one has to do the following
+
+- edit the global parameters in `global_params.toml`
+- edit the simulation paramaters `sim_params.toml`
+- run the script `run_sim.jl` e.g. like this
+
+```
+julia> using Pkg
+julia> Pkg.add("DrWatson") # install globally, for using `quickactivate`
+julia> Pkg.activate("path/to/this/project")
+julia> Pkg.instantiate()
+julia> @quickactivate "SPH"
+julia> include(scriptsdir("run_sim.jl"))
+```
+
+# Results
+
+The data produced by the scripts can be found in the `data` directory. A separate folder is created for each run.
+
+
 
