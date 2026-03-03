@@ -125,7 +125,7 @@ mutable struct Particle <: AbstractParticle
 		obj.P = obj.P′ + obj.P_bg
 		obj.θ = obj.θ′ + obj.θ_bg
 
-		obj.m = obj.ρ * dr^2
+		obj.m = ρ0 * dr^2
 		obj.c = sqrt(γ * obj.P / obj.ρ)
 		return obj
 	end
