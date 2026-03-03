@@ -292,7 +292,7 @@ end
 
 function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
 	if p.type == FLUID
-		p.v += 0.5 * dt * (p.Dv + buyoancy_force(p, g) + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
+		p.v += 0.5 * dt * (p.Dv + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
 end
 

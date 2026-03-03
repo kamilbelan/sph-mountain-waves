@@ -68,7 +68,6 @@ mutable struct Particle <: AbstractParticle
 	θ′::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
-	T′::Float64       # temperature perturbation
 	T::Float64        # total temperature
 	type::Float64     # particle type
 
@@ -100,29 +99,29 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # θ′ 
 			0.0,            # θ 
 			0.0,            # T_bg
-			0.0,            # T′
 			0.0,            # T
 			type,           # type
 		)
 
 		# initialization
-		obj.T_bg = T_bg
+		
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
-		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
-		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-
 		obj.ρ′ = 0.0
-		obj.P′ = 0.0
-		obj.T′ = 0.0
-		obj.θ′ = 0.0
-
-		obj.T = obj.T′ + T_bg
 		obj.ρ = obj.ρ′ + obj.ρ_bg
+		obj.m = ρ0 * dr^2
+
+		obj.T_bg = T_bg
+		obj.T = T_bg
+
+		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
+		obj.P′ = 0.0
 		obj.P = obj.P′ + obj.P_bg
+		obj.c = sqrt(γ * obj.P / obj.ρ)
+
+		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
+		obj.θ′ = 0.0
 		obj.θ = obj.θ′ + obj.θ_bg
 
-		obj.m = ρ0 * dr^2
-		obj.c = sqrt(γ * obj.P / obj.ρ)
 		return obj
 	end
 end
@@ -164,7 +163,6 @@ end
 
 @inbounds function find_temperature!(p::Particle, R_mass::Float64)
 	p.T = p.P / (R_mass * p.ρ)
-	p.T′ = p.T - p.T_bg
 end
 
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
@@ -211,10 +209,9 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 end
 
 function buyoancy_force(p::Particle, g::Float64)
-	return -g * VECY * p.ρ′ / p.ρ # the (density) of gravity is - g * VECY
+	return -g * VECY * p.ρ′ / p.ρ 
 
 end
-
 
 # ==============
 # Momentum balance

@@ -69,11 +69,10 @@ function write_frame!(run_dir::String, sys::ParticleSystem, frame_counter::Int, 
 	pos_matrix = zeros(Float64, 3, N_parts)
 	vel_matrix = zeros(Float64, 3, N_parts)
 	densities = zeros(Float64, N_parts)
-	densities_pert = zeros(Float64, N_parts)
 	pressures = zeros(Float64, N_parts)
-	pressures_pert = zeros(Float64, N_parts)
 	temperatures = zeros(Float64, N_parts)
 	pot_temperatures = zeros(Float64, N_parts)
+	pot_temperatures_pert = zeros(Float64, N_parts)
 	types = zeros(Float64, N_parts)
 
 	@inbounds for (i, p) in enumerate(sys.particles)
@@ -86,11 +85,11 @@ function write_frame!(run_dir::String, sys::ParticleSystem, frame_counter::Int, 
 		vel_matrix[3, i] = 0.0  
 
 		densities[i] = p.ρ
-		densities_pert[i] = p.ρ′
 		pressures[i] = p.P
-		pressures_pert[i] = p.P′
 		temperatures[i] = p.T
 		pot_temperatures[i] = p.θ
+		pot_temperatures_pert[i] = p.θ′
+
 		types[i] = p.type
 	end
 
@@ -105,11 +104,10 @@ function write_frame!(run_dir::String, sys::ParticleSystem, frame_counter::Int, 
 		file["positions"] = pos_matrix
 		file["velocities"] = vel_matrix
 		file["densities"] = densities
-		file["densities_pert"] = densities_pert
 		file["pressures"] = pressures
-		file["pressures_pert"] = pressures_pert
 		file["temperatures"] = temperatures
 		file["pot_temperatures"] = pot_temperatures
+		file["pot_temperatures_pert"] = pot_temperatures_pert
 		file["types"] = types
 	end
 end

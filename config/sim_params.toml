@@ -1,7 +1,7 @@
 # spatial and temporal resolution
 dr = [346.0]            # 26e3/25 = 1040.0, 26e3/50.0 = 520, 26e4/75 = 346.0 , 26e3/100 = 260.0
 dt_rel = [0.01]           #this will be multiplied by h0/c
-t_end  = [2.0]         
+t_end  = [1.0]         
 
 # numerics
 rho_floor = [1e-6]
@@ -15,12 +15,11 @@ gamma_r_rel = [5.0]        # this will be multiplied by N = sqrt(0.0196)
 # choice of the formulation
 # options include:
 #    StaticStandardWCSPH
-#    StaticWCSPHHopkins
 #    StaticStandardHopkins
 #    StaticDiffHopkins
 #    StaticDiffPThetaHopkins
  
-formulation = ["StaticDiffPThetaHopkins"]
+formulation = ["StaticDiffPThetaHopkins", "StaticDiffHopkins", "StaticStandardWCSPH", "StaticStandardHopkins"]
 
 
 
