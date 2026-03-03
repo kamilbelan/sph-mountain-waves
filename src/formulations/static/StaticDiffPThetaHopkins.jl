@@ -51,26 +51,19 @@ include(srcdir("io", "data_storage.jl"))
 
 mutable struct Particle <: AbstractParticle
 	h::Float64        # smoothing length
-	Dh::Float64       # rate of smoothing length
 	x::RealVector     # position
 	m::Float64        # mass
 	v::RealVector     # velocity
 	Dv::RealVector    # acceleration
-	ρ_bg::Float64     # background density
-	ρ′::Float64       # density perturbation
 	ρ::Float64        # total density
-	Dρ::Float64       # density rate
 	n::Float64        # number density
 	Omega::Float64    # ∇h correction factor
 	P_bg::Float64     # background pressure
-	P′::Float64       # pressure perturbation
 	P::Float64        # total pressure
-	c::Float64        # local speed of sound
 	θ_bg::Float64     # bakcground potential temperature
 	θ′::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
-	T′::Float64       # temperature perturbation
 	T::Float64        # total temperature
 	type::Float64     # particle type
 
@@ -85,47 +78,37 @@ mutable struct Particle <: AbstractParticle
 		h0 = η * dr
 		obj = new(
 			h0,             # h 
-			0.0,            # Dh
 			x,              # x 	 	
 			0.0,            # m
 			v,              # v
 			VEC0,           # Dv
-			0.0,            # ρ_bg
-			0.0,            # ρ′
 			0.0,            # ρ
-			0.0,            # Dρ
 			0.0,            # n
 			0.0,            # Omega
 			0.0,            # P_bg
-			0.0,            # P′
 			0.0,            # P
-			0.0,            # c
 			0.0,            # θ_bg 
 			0.0,            # θ′ 
 			0.0,            # θ 
 			0.0,            # T_bg
-			0.0,            # T′
 			0.0,            # T
 			type,           # type
 		)
 
 		# initialization
-		obj.T_bg = T_bg
-		obj.ρ_bg = 0.0 # needs SPH sum!
-		obj.P_bg = 0.0 # needs SPH sum!
-		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 
-		obj.ρ′ = 0.0
-		obj.P′ = 0.0
-		obj.T′ = 0.0
-		obj.θ′ = 0.0
-
-		obj.T = obj.T′ + T_bg
-		obj.ρ = obj.ρ′ + obj.ρ_bg
-		obj.P = obj.P′ + obj.P_bg
-		obj.θ = background_pot_temperature(obj.x[2], ρ0, T_bg, g, R_mass, R_gas)
-
+		obj.ρ = 0.0 # needs SPH sum!
 		obj.m = ρ0 * dr^2
+
+		obj.T_bg = T_bg
+		obj.T = T_bg
+
+		obj.P_bg = 0.0 # needs SPH sum!
+		obj.P = 0.0 # needs SPH sum!
+
+		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
+		obj.θ′ = 0.0
+		obj.θ = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 
 		return obj
 	end
@@ -213,12 +196,7 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 	end
 end
 
-function buyoancy_force(p::Particle, g::Float64)
-	return VEC0
-	#return -g * VECY 
-
-end
-
+# NO BUYOANCY EXPLICITELY!
 
 # ==============
 # Momentum balance
