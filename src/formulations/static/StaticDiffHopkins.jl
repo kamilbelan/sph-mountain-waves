@@ -442,7 +442,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 
 	# initialize the density
 	apply!(sys, p -> reset_density!(p))
-	apply!(sys, compute_density!)
+	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 
 	# initialization of the pressure
 	apply!(sys, p -> reset_pressure!(p, γ))
