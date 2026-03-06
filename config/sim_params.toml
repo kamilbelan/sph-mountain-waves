@@ -12,14 +12,17 @@ alpha = [0.1]             # usually α = 0.05 - 0.2
 beta = [0.2]              # usually β = 2 α
 gamma_r_rel = [5.0]        # this will be multiplied by N = sqrt(0.0196)
 
+# initial conditions
+v_initial = [20.0]
+
 # choice of the formulation
 # options include:
 #    StaticStandardWCSPH
 #    StaticStandardHopkins
 #    StaticDiffHopkins
 #    StaticDiffPThetaHopkins
- 
-formulation = ["StaticDiffPThetaHopkins", "StaticDiffHopkins", "StaticStandardWCSPH", "StaticStandardHopkins"]
+#    EvolStandardWCSPH 
+formulation = ["EvolStandardWCSPH"]
 
 
 
