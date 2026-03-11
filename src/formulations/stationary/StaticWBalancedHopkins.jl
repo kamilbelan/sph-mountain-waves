@@ -6,7 +6,7 @@
  all thermodynamic processes are adiabatic
 """
 
-module StaticDiffHopkins
+module StaticWBalancedHopkins
 
 export run_sim
 
