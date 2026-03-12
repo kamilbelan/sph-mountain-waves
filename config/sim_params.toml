@@ -13,7 +13,7 @@ beta = [0.2]              # usually β = 2 α
 gamma_r_rel = [5.0]        # this will be multiplied by N = sqrt(0.0196)
 
 # initial conditions
-#v_initial = [20.0]
+v_initial = [20.0]
 
 # choice of the formulation
 # options include:
@@ -23,7 +23,7 @@ gamma_r_rel = [5.0]        # this will be multiplied by N = sqrt(0.0196)
 #    StaticWBalancedHopkins
 #    StaticWBalancedPThetaHopkins
 #    EvolStandardWCSPH 
-formulation = ["StaticStandardHopkins"]
+formulation = ["EvolStandardWCSPH"]
 
 
 

@@ -25,12 +25,6 @@ using CSV
 using Parameters 
 using LinearAlgebra
 
-const FLUID = 0.0
-const WALL = 1.0
-const MOUNTAIN = 2.0
-const INFLOW = 3.0
-const OUTFLOW = 4.0
-
 
 # ==============
 # INCLUDE CORE SCRIPTS
@@ -72,6 +66,13 @@ mutable struct Particle <: AbstractParticle
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
 	type::Float64     # particle type
+	id::Int64              # the index of the particle in sys.particles
+	spawn_y::Float64       # the altitude it was generated at
+	grad_ρ::RealVector     # ∇ρ
+	grad_u::RealVector     # ∇u (x-velocity gradient)
+	grad_w::RealVector     # ∇w (y-velocity gradient)
+	best_match_id::Int64   # rd of the fluid particle 'e'
+	min_dist_sq::Float64   # argmin distance tracker
 
 	function Particle(x::RealVector, v::RealVector, type::Float64, global_params::Dict, sim_params::Dict)
 		# unpack all parameters
@@ -102,7 +103,13 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
-			type,           # type
+			0.0, # type
+			0.0, #spawn_y::Float64
+			0.0, #grad_ρ::RealVector
+			0.0, #grad_u::RealVector
+			0.0, #grad_w::RealVector
+			0.0, #best_match_id::Int64
+			0.0, #min_dist_sq::Float64
 		)
 
 		# initialization
@@ -123,6 +130,8 @@ mutable struct Particle <: AbstractParticle
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 		obj.θ′ = 0.0
 		obj.θ = obj.θ′ + obj.θ_bg
+
+		obj.spawn_y = obj.x[2]
 
 		return obj
 	end
