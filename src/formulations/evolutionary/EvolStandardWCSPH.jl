@@ -105,11 +105,12 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # T_bg
 			0.0,            # T
 			0.0, # type
+	                0,   # the index of the particle in sys.particles
 			0.0, #spawn_y::Float64
-			0.0, #grad_ρ::RealVector
-			0.0, #grad_u::RealVector
-			0.0, #grad_w::RealVector
-			0.0, #best_match_id::Int64
+			VEC0, #grad_ρ::RealVector
+			VEC0, #grad_u::RealVector
+			VEC0, #grad_w::RealVector
+			0, #best_match_id::Int64
 			0.0, #min_dist_sq::Float64
 		)
 
@@ -311,10 +312,10 @@ end
 # ==============
 function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict )
 	# unpack all parameters
-	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N, v_initial = global_params
+	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
 
 	# compute derived parameters
 	h0 = η * dr

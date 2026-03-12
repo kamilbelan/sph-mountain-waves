@@ -46,10 +46,8 @@ search_best_extrapolator!(p::AbstractParticle, q::AbstractParticle, r::Float64, 
 
 For the ghost particle p it finds the best (ie closest) fluid (or incoming) particle q to extrapolate some quantities and stores its id.
 """
-function search_best_extrapolator!(p::AbstractParticle, q::AbstractParticle, r::Float64, grid::ExpGrid)
+function search_best_extrapolator!(p::AbstractParticle, q::AbstractParticle, dr::Float64, K::Float64)
 	@inbounds if ((p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)) && ((q.type == FLUID) || (q.type == INFLOW_INCOMING))
-		dr = grid.dr
-		K = grid.K
 		a_factor = (4/3)^(1/4)
 		a_local = dr * exp(K * max(0.0, p.x[2]) / 2.0) * a_factor
 
