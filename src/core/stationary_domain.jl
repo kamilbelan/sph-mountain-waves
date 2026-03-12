@@ -19,17 +19,16 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 	dr_base = grid.dr
 	K = grid.K
 
-	# 1. Hexagonal area-preserving factors (guarantees area = dr^2)
+	# hexagonal factors 
 	a_factor = (4/3)^(1/4)
 	b_factor = (3/4)^(1/4)
 
 	xs = RealVector[]
 
-	# 2. UPPER HALF: Stepping up from global datum y = 0.0
+	# upper half
 	y = 0.0
 	layer = 0
 	while y <= rect.x2_max
-		# Exponentially increasing spacing for the atmosphere
 		s_local = dr_base * exp(K * y / 2.0)
 		a_local = s_local * a_factor
 		b_local = s_local * b_factor
@@ -50,15 +49,13 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 		y += b_local
 		layer += 1
 	end
-	# 3. LOWER HALF: Stepping down from global datum y = 0.0
+	# lower half
 	y = 0.0
 	layer = 0
 	while true
-		# step DOWN into the boundary
+		# step down into the boundary
 		layer -= 1
 
-		# evaluate local spacing at the new negative y
-		# We use the exact exponential scaling so the geometry matches the pressure!
 		s_local = dr_base * exp(K * y / 2.0)
 		b_local = s_local * b_factor
 		a_local = s_local * a_factor
@@ -108,7 +105,8 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
 	mountain = Specification(domain, x -> (x[2] <= witch_profile(x[1])))
 
-	sys = ParticleSystem(Particle, domain + fence, h0)
+	# AD HOC 3.0!
+	sys = ParticleSystem(Particle, domain + fence, 3.0*h0)
 
 	# passing params to the Particle constructor
 	generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))

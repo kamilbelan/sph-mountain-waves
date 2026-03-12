@@ -3,9 +3,16 @@ using Parameters
 
 import SmoothedParticles: Grid2, covering, is_inside, boundarybox, RealVector, Shape
 
+# declare particle types
+const FLUID = 0.0
+const WALL = 1.0
+const MOUNTAIN = 2.0
+const INFLOW_GHOST = 3.0
+const INFLOW_INCOMING = 4.0
+const OUTFLOW_GHOST = 5.0
 
 """
-ExpGrid(dr, K)
+    ExpGrid(dr, K)
 
 Creates an isotropically spaced grid whose spacing decays exponentially.
 """
@@ -19,17 +26,16 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 	dr_base = grid.dr
 	K = grid.K
 
-	# 1. Hexagonal area-preserving factors (guarantees area = dr^2)
+	# hexagonal factors 
 	a_factor = (4/3)^(1/4)
 	b_factor = (3/4)^(1/4)
 
 	xs = RealVector[]
 
-	# 2. UPPER HALF: Stepping up from global datum y = 0.0
+	# upper half
 	y = 0.0
 	layer = 0
 	while y <= rect.x2_max
-		# Exponentially increasing spacing for the atmosphere
 		s_local = dr_base * exp(K * y / 2.0)
 		a_local = s_local * a_factor
 		b_local = s_local * b_factor
@@ -50,15 +56,13 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 		y += b_local
 		layer += 1
 	end
-	# 3. LOWER HALF: Stepping down from global datum y = 0.0
+	# lower half
 	y = 0.0
 	layer = 0
 	while true
-		# step DOWN into the boundary
+		# step down into the boundary
 		layer -= 1
 
-		# evaluate local spacing at the new negative y
-		# We use the exact exponential scaling so the geometry matches the pressure!
 		s_local = dr_base * exp(K * y / 2.0)
 		b_local = s_local * b_factor
 		a_local = s_local * a_factor
@@ -86,7 +90,7 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 end
 
 """
-make_system(Particle::Type, global_params::Dict, sim_params::Dict)
+    make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 Creates the system's geometry and places particles of type `Particle in the positions.
 """
@@ -99,29 +103,72 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 	K = g / (R_mass * T_bg)
 	h0 = η * dr
-	bc_width = 12 * dr 
+
+	# derive bc_width from the maximal spacing
+	a_factor = (4/3)^(1/4)
+	s_max = dr * exp(K * dom_height / 2.0)
+	bc_width = 6 * s_max * a_factor 
 
 	# place the particles into ExpGrid
 	grid = ExpGrid(dr, K)
 	domain = Rectangle(- dom_length / 2.0, 0.0, dom_length / 2.0, dom_height)
 	fence = BoundaryLayer(domain, grid, bc_width)
 
+	# mountain profile
 	witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
 	mountain = Specification(domain, x -> (x[2] <= witch_profile(x[1])))
 
-	wind = Specification(fence, x -> ((x[1] <= -dom_length / 2) && ( x[2] >= 0 && x[2] <= dom_height)))
-	sink=Specification(fence, x -> ((x[1] >= dom_length / 2) && (x[2] >= 0 && x[2] <= dom_height)))
+	# ==============
+	# Extrapolating Boundary Conditions setup
+	# ==============
 
-	sys = ParticleSystem(Particle, domain + fence, h0)
+	# horizontal spacing local_a(y) of our grid changes, we need columns
+	local_a(y) = dr * exp(K * max(0.0, y) / 2.0) * a_factor	
 
-	# passing params to the Particle constructor
+	## INFLOW ##
+	# place 2 layers of incoming particles at the inflow (part of the fence)
+	inflow_incoming_spec = Specification(fence, x -> 
+				      (-dom_length/2 - 2.1*local_a(x[2]) < x[1] <= -dom_length/2) && 
+				      (0 <= x[2] <= dom_height)
+				      )
+
+	# place 3 layers of ghost particles at the inflow (part of the fence)
+	inflow_ghost_spec = Specification(fence, x -> 
+				   (-dom_length/2 - 5.1*local_a(x[2]) < x[1] <= -dom_length/2 - 2.1*local_a(x[2])) &&
+				   (0 <= x[2] <= dom_height)
+				   )
+
+	## OUTFLOW ##
+	# place 3 layers of ghost particles at the outflow (part of the fence)
+	outflow_ghost_spec = Specification(fence, x -> 
+        (dom_length/2 <= x[1] < dom_length/2 + 3.1*local_a(x[2])) && 
+        (0 <= x[2] <= dom_height)
+    )
+
+	## THE REST ##
+	# what is not specified is the fence's wall
+	fence_wall = fence - inflow_incoming_spec - inflow_ghost_spec - outflow_ghost_spec
+
+	# AD HOC 3.0!
+	sys = ParticleSystem(Particle, domain + fence, 3.0*h0)
+
+	# domain + walls
 	generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
-	generate_particles!(sys, grid, fence, x -> Particle(x, VEC0, WALL, global_params, sim_params))
-	generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
-	generate_particles!(sys, grid, wind, x -> Particle(x, VEC0, INFLOW, global_params, sim_params))
-	generate_particles!(sys, grid, sink, x -> Particle(x, VEC0, OUTFLOW, global_params, sim_params))
+	generate_particles!(sys, grid, fence_wall, x -> Particle(x, VEC0, WALL, global_params, sim_params))
+	generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, MOUNTAIN, global_params, sim_params))
+
+	# outflow and inflow
+	generate_particles!(sys, grid, inflow_incoming_spec, x -> Particle(x, VEC0, INFLOW_INCOMING, global_params, sim_params))
+	generate_particles!(sys, grid, inflow_ghost_spec, x -> Particle(x, VEC0, INFLOW_GHOST, global_params, sim_params))
+	generate_particles!(sys, grid, outflow_ghost_spec, x -> Particle(x, VEC0, OUTFLOW_GHOST, global_params, sim_params))
 
 	create_cell_list!(sys)
+
+	# initialize the particle.id
+	for i=1:length(sys.particles)
+		sys.particles[i].id = i
+	end
+
 	return sys
 end
 
