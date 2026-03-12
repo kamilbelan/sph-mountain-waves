@@ -2,23 +2,23 @@ using SmoothedParticles
 using Parameters
 
 """
-    reset_ebc_gradients!(p::Particle)
+    reset_ebc_gradients!(p::AbstractParticle)
 
 Sets grad_ρ, grad_u, grad_w to the zero vector.
 """
-@inbounds function reset_ebc_gradients!(p::Particle)
+function reset_ebc_gradients!(p::AbstractParticle)
 	p.grad_ρ = VEC0
 	p.grad_u = VEC0
 	p.grad_w = VEC0
 end
 
 """
-    compute_ebc_gradients!(p::Particle, q::Particle, r::Float64)
+    compute_ebc_gradients!(p::AbstractParticle, q::AbstractParticle, r::Float64)
 
 Computes the gradient grad_ρ, grad_u, grad_w using a SPH sum
 """
-@inbounds function compute_ebc_gradients!(p::Particle, q::Particle, r::Float64)
-	if (p.type == FLUID) || (p.type == INFLOW_INCOMING)
+function compute_ebc_gradients!(p::AbstractParticle, q::AbstractParticle, r::Float64)
+	@inbounds if (p.type == FLUID) || (p.type == INFLOW_INCOMING)
 		x_pq = p.x - q.x
 		ker = q.m * rDwendland2(p.h, r)
 
@@ -29,11 +29,11 @@ Computes the gradient grad_ρ, grad_u, grad_w using a SPH sum
 end
 
 """
-    reset_ebc_search!(p::Particle)
+    reset_ebc_search!(p::AbstractParticle)
 
 Resets the particles fields `best_match_id, min_dist_sq` to perform a fresh new search in next step.
 """
-@inbounds function reset_ebc_search!(p::Particle)
+function reset_ebc_search!(p::AbstractParticle)
 	if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)
 		p.best_match_id = -1
 		p.min_dist_sq = Inf
@@ -42,12 +42,12 @@ Resets the particles fields `best_match_id, min_dist_sq` to perform a fresh new 
 end
 
 """
-search_best_extrapolator!(p::Particle, q::Particle, r::Float64, sim_params::Dict)
+search_best_extrapolator!(p::AbstractParticle, q::AbstractParticle, r::Float64, sim_params::Dict)
 
 For the ghost particle p it finds the best (ie closest) fluid (or incoming) particle q to extrapolate some quantities and stores its id.
 """
-@inbounds function search_best_extrapolator!(p::Particle, q::Particle, r::Float64, grid::ExpGrid)
-	if ((p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)) && ((q.type == FLUID) || (q.type == INFLOW_INCOMING))
+function search_best_extrapolator!(p::AbstractParticle, q::AbstractParticle, r::Float64, grid::ExpGrid)
+	@inbounds if ((p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)) && ((q.type == FLUID) || (q.type == INFLOW_INCOMING))
 		dr = grid.dr
 		K = grid.K
 		a_factor = (4/3)^(1/4)
@@ -100,10 +100,8 @@ end
 
 Marks inflow particle inside domain as fluid particles and sets the particles exiting the domain as inflow particles.
 """
-function manage_particle_lifecycle!(sys::ParticleSystem, grid::ExpGrid, dom_length::Float64)
+function manage_particle_lifecycle!(sys::ParticleSystem, dr::Float64, K::Float64, dom_length::Float64)
 	a_factor = (4/3)^(1/4)
-	dr = grid.dr
-	K = grid.K
 
 	for p in sys.particles
 		# retype inflow into fluid if it is in the domain
@@ -126,11 +124,11 @@ function manage_particle_lifecycle!(sys::ParticleSystem, grid::ExpGrid, dom_leng
 end
 
 """
-    set_inflow_values!(p::Particle, v_initial::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
+    set_inflow_values!(p::AbstractParticle, v_initial::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
 
 Assigns correct field values for particles at the inflow.
 """
-function set_inflow_values!(p::Particle, v_initial::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
+function set_inflow_values!(p::AbstractParticle, v_initial::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
 	if p.type == INFLOW_INCOMING
 			inflow_velocity = v_initial * VECX
 			p.v = inflow_velocity
