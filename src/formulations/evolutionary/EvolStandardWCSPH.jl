@@ -34,6 +34,7 @@ include(srcdir("core", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("core", "ebc_boundaries.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -275,6 +276,14 @@ end
 	p.Dρ = 0.0
 end
 
+@inbounds function update_ghost_density_perturbation!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
+    if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)
+        # Background density is strictly a function of the ghost's fixed y-coordinate
+        p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
+        p.ρ′ = p.ρ - p.ρ_bg
+    end
+end
+
 
 # ==============
 # Move & accelerate
@@ -296,53 +305,20 @@ function reset_acceleration!(p::Particle)
 	p.Dv = VEC0
 end
 
-# ==============
-# Inflow & outflow treatment
-# ==============
-
-function add_inflow_particles!(sys::ParticleSystem, glob_params::Dict, sim_params::Dict)
-	@unpack dom_length = glob_params
-	@unpack dr = sim_params
-	bc_width = 12 * dr 
-
-	new_particles = Particle[]
-
-	for p in sys.particles
-		if p.type == INFLOW && p.x[1] >= -dom_length/2
-			p.type = FLUID
-			x = p.x - bc_width * VECX
-			newp = Particle(x, VEC0, INFLOW, glob_params, sim_params)
-			push!(new_particles, newp)
-		end
-	end
-	append!(sys.particles, new_particles)
-end
-
-function set_inflow_velocity!(p::Particle, sim_params::Dict)
-	@unpack v_initial = sim_params
-	inflow_velocity = v_initial * VECX
-
-	if p.type == INFLOW
-		p.v = inflow_velocity
-	end
-end
-
-function remove_outflow_particles!(sys::ParticleSystem, glob_params::Dict, sim_params::Dict)
-	
-end
 
 # ==============
 # Verlet step
 # ==============
 function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict )
 	# unpack all parameters
-	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
+	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N, v_initial = global_params
 	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
 	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
 	# compute derived parameters
 	h0 = η * dr
+	K = g / (R_mass * T_bg)
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
@@ -350,7 +326,23 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	# half-step acceleration & drift
 	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 	apply!(sys, p -> move!(p, dt))
+
+	# lifecycle management: teleport particles at the outflow to the inflow and set correct values for them
+	manage_particle_lifecycle!(sys, dr, K, dom_length)
+    apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass))
+
+	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
+	
+	# extrapolate ρ, v to the ghost particles at the boundaries
+	apply!(sys, p -> reset_ebc_gradients!(p))
+	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
+	apply!(sys, p -> reset_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_best_extrapolator!(p, q, dr, K))
+	apply_extrapolation!(sys)
+
+	# set correct density values to the ghost particles
+	apply!(sys, p -> update_ghost_density_perturbation!(p, ρ0, T_bg, g, R_mass))
 
 	# reset rates 
 	apply!(sys, p -> reset_acceleration!(p))

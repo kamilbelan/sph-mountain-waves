@@ -100,8 +100,10 @@ end
 
 Marks inflow particle inside domain as fluid particles and sets the particles exiting the domain as inflow particles.
 """
-function manage_particle_lifecycle!(sys::ParticleSystem, dr::Float64, K::Float64, dom_length::Float64)
+function manage_particle_lifecycle!(sys::ParticleSystem, grid::ExpGrid, dom_length::Float64)
 	a_factor = (4/3)^(1/4)
+	dr = grid.dr
+	K = grid.K
 
 	for p in sys.particles
 		# retype inflow into fluid if it is in the domain
