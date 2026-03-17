@@ -64,7 +64,7 @@ mutable struct Particle <: AbstractParticle
 		# Derived values within the constructor
 		h0 = η * dr
 		obj = new(
-			0.0,            # type
+			type,            # type
 	                0,              # the index of the particle in sys.particles
 			0.0,            #spawn_y::Float64
 			VEC0,           #grad_ρ::RealVector
