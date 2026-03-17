@@ -157,6 +157,11 @@ function background_pot_temperature(y::Float64, ρ0::Float64, T_bg::Float64, g::
 	return T_bg * (((T_bg * R_gas * ρ0) / P_bg))^(2 / 7)
 end
 
+function set_bulk_velocity!(p::Particle, v_initial::Float64)
+	if p.type == FLUID
+		p.v = v_initial * VECX
+	end
+end
 
 # ==============
 # Pressure computation (e.g followed by sound speed computation)
@@ -330,7 +335,7 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 
 	# lifecycle management: teleport particles at the outflow to the inflow and set correct values for them
 	manage_particle_lifecycle!(sys, dr, K, dom_length)
-    apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass))
+	apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass))
 
 	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
@@ -383,7 +388,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
 
 	# compute derived parameters
 	h0 = η * dr
@@ -398,6 +403,9 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Initialization of the physical fields
 	# ==============
+	
+	# set the initial velocity to the whole bulk
+	#apply!(sys, p -> set_bulk_velocity!(p, v_initial))
 	
 	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))

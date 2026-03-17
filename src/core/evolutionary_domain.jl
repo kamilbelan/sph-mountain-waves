@@ -90,7 +90,107 @@ function covering(grid::ExpGrid, s::Shape)::Vector{RealVector}
 end
 
 """
-    make_system(Particle::Type, global_params::Dict, sim_params::Dict)
+    WitchExpGrid(dr, K, h_m, a, H)
+
+Creates an isotropically spaced grid with the Witch of Agnesi mountain profile. The vertical spacing decays exponentially 
+"""
+mutable struct WitchExpGrid <: Grid2
+	dr::Float64
+	K::Float64
+	h_m::Float64
+	a::Float64
+	H::Float64
+end
+
+function covering(grid::WitchExpGrid, s::Shape)::Vector{RealVector}
+	rect = boundarybox(s) 
+
+	dr_base = grid.dr
+	K = grid.K
+	h_m = grid.h_m
+	a = grid.a
+	H = grid.H
+
+	# hexagonal factors 
+	a_factor = (4/3)^(1/4)
+	b_factor = (3/4)^(1/4)
+
+	xs = RealVector[]
+
+	# upper half
+	y = 0.0
+	layer = 0
+	while y <= rect.x2_max
+		s_local = dr_base * exp(K * y / 2.0)
+		a_local = s_local * a_factor
+		b_local = s_local * b_factor
+
+		if y >= rect.x2_min
+			i_min = Int(floor(rect.x1_min / a_local))
+			i_max = Int(ceil(rect.x1_max / a_local))
+			offset = iseven(layer) ? 0.0 : 0.5 * a_local
+
+			for i in i_min:i_max
+				pos_flat = RealVector((i * a_local) + offset, y, 0.0)
+
+				# check if it belongs in the geometric shape
+				if is_inside(pos_flat, s)
+
+					# apply the terrain-following transformation
+					hx = (h_m * a^2) / (pos_flat[1]^2 + a^2)
+					y_warped = pos_flat[2] + hx * ((H - pos_flat[2]) / H)
+
+					pos_warped = RealVector(pos_flat[1], y_warped, 0.0)
+					push!(xs, pos_warped)
+				end
+			end
+		end
+
+		y += b_local
+		layer += 1
+	end
+
+	# lower half
+	y = 0.0
+	layer = 0
+	while true
+		# step down into the boundary
+		layer -= 1
+
+		s_local = dr_base * exp(K * y / 2.0)
+		b_local = s_local * b_factor
+		a_local = s_local * a_factor
+
+		y -= b_local 
+
+		if y < rect.x2_min
+			break
+		end
+
+		if y <= rect.x2_max
+			i_min = Int(floor(rect.x1_min / a_local))
+			i_max = Int(ceil(rect.x1_max / a_local))
+			offset = iseven(layer) ? 0.0 : 0.5 * a_local
+
+			for i in i_min:i_max
+				pos_flat = RealVector((i * a_local) + offset, y, 0.0)
+
+				if is_inside(pos_flat, s)
+					# Keep mapping the ground so the wall bends with the mountain
+					hx = (h_m * a^2) / (pos_flat[1]^2 + a^2)
+					y_warped = pos_flat[2] + hx * ((H - pos_flat[2]) / H)
+
+					pos_warped = RealVector(pos_flat[1], y_warped, 0.0)
+					push!(xs, pos_warped)
+				end
+			end
+		end
+	end   
+	return xs
+end
+
+"""
+make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 Creates the system's geometry and places particles of type `Particle in the positions.
 """
@@ -98,7 +198,7 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	# unpack needed parameters
 
 	@unpack dom_height, dom_length, h_m, a = global_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
 	@unpack g, R_mass, T_bg = global_params
 
 	K = g / (R_mass * T_bg)
@@ -109,14 +209,10 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	s_max = dr * exp(K * dom_height / 2.0)
 	bc_width = 6 * s_max * a_factor 
 
-	# place the particles into ExpGrid
-	grid = ExpGrid(dr, K)
+	# place the particles into WitchExpGrid (terrain following grid)
+	grid = WitchExpGrid(dr, K, h_m, a, dom_height)
 	domain = Rectangle(- dom_length / 2.0, 0.0, dom_length / 2.0, dom_height)
 	fence = BoundaryLayer(domain, grid, bc_width)
-
-	# mountain profile
-	witch_profile(x) = (h_m * a^2) / (x^2 + a^2)
-	mountain = Specification(domain, x -> (x[2] <= witch_profile(x[1])))
 
 	# ==============
 	# Extrapolating Boundary Conditions setup
@@ -141,9 +237,9 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	## OUTFLOW ##
 	# place 3 layers of ghost particles at the outflow (part of the fence)
 	outflow_ghost_spec = Specification(fence, x -> 
-        (dom_length/2 <= x[1] < dom_length/2 + 3.1*local_a(x[2])) && 
-        (0 <= x[2] <= dom_height)
-    )
+				    (dom_length/2 <= x[1] < dom_length/2 + 3.1*local_a(x[2])) && 
+				    (0 <= x[2] <= dom_height)
+				    )
 
 	## THE REST ##
 	# what is not specified is the fence's wall
@@ -152,15 +248,17 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	# AD HOC 3.0!
 	sys = ParticleSystem(Particle, domain + fence, 3.0*h0)
 
+	# initial velocity
+	initial_velocity = v_initial * VECX
+
 	# domain + walls
-	generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
+	generate_particles!(sys, grid, domain, x -> Particle(x, initial_velocity, FLUID, global_params, sim_params))
 	generate_particles!(sys, grid, fence_wall, x -> Particle(x, VEC0, WALL, global_params, sim_params))
-	generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, MOUNTAIN, global_params, sim_params))
 
 	# outflow and inflow
-	generate_particles!(sys, grid, inflow_incoming_spec, x -> Particle(x, VEC0, INFLOW_INCOMING, global_params, sim_params))
-	generate_particles!(sys, grid, inflow_ghost_spec, x -> Particle(x, VEC0, INFLOW_GHOST, global_params, sim_params))
-	generate_particles!(sys, grid, outflow_ghost_spec, x -> Particle(x, VEC0, OUTFLOW_GHOST, global_params, sim_params))
+	generate_particles!(sys, grid, inflow_incoming_spec, x -> Particle(x, initial_velocity, INFLOW_INCOMING, global_params, sim_params))
+	generate_particles!(sys, grid, inflow_ghost_spec, x -> Particle(x, initial_velocity, INFLOW_GHOST, global_params, sim_params))
+	generate_particles!(sys, grid, outflow_ghost_spec, x -> Particle(x, initial_velocity, OUTFLOW_GHOST, global_params, sim_params))
 
 	create_cell_list!(sys)
 
