@@ -1,12 +1,10 @@
 """
- Static atmosphere above a mountain with the Witch of Agnesi profile:
+ An isentropic flow around a mountain with the Witch of Agnesi profile:
 
- h(x) = (h_m a²) / (x² + a²),
-
- all thermodynamic processes are adiabatic
+ h(x) = (hₘ a²) / (x² + a²),
 """
 
-module EvolStandardWCSPH
+module EvolWBalancedWCSPH
 
 export run_sim
 
@@ -104,14 +102,14 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
-			0.0, # type
-	                0,   # the index of the particle in sys.particles
-			0.0, #spawn_y::Float64
-			VEC0, #grad_ρ::RealVector
-			VEC0, #grad_u::RealVector
-			VEC0, #grad_w::RealVector
-			0, #best_match_id::Int64
-			0.0, #min_dist_sq::Float64
+			0.0,            # type
+	                0,              # the index of the particle in sys.particles
+			0.0,            #spawn_y::Float64
+			VEC0,           #grad_ρ::RealVector
+			VEC0,           #grad_u::RealVector
+			VEC0,           #grad_w::RealVector
+			0,              #best_match_id::Int64
+			0.0,            #min_dist_sq::Float64
 		)
 
 		# initialization
