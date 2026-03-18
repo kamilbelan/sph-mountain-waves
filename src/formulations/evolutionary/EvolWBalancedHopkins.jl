@@ -6,7 +6,7 @@
  all thermodynamic processes are adiabatic
 """
 
-module StaticWBalancedHopkins
+module EvolWBalancedHopkins
 
 export run_sim
 
@@ -38,7 +38,13 @@ include(srcdir("core", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
-include(srcdir("core", "ebc_boundaries.jl"))
+include(srcdir("core", "bc", "ebc_shared.jl"))
+
+# ==============
+# INCLUDE FORMULATION-SPECIFIC SCRIPTS
+# ==============
+
+include(srcdir("core", "bc", "ebc_hopkins.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -71,7 +77,7 @@ mutable struct Particle <: AbstractParticle
 	type::Float64     # particle type
 	id::Int64              # the index of the particle in sys.particles
 	spawn_y::Float64       # the altitude it was generated at
-	grad_ρ::RealVector     # ∇ρ
+	grad_A::RealVector     # ∇A
 	grad_u::RealVector     # ∇u (x-velocity gradient)
 	grad_w::RealVector     # ∇w (y-velocity gradient)
 	best_match_id::Int64   # rd of the fluid particle 'e'
@@ -108,7 +114,7 @@ mutable struct Particle <: AbstractParticle
 			type,           # type
 	                0,              # the index of the particle in sys.particles
 			0.0,            #spawn_y::Float64
-			VEC0,           #grad_ρ::RealVector
+			VEC0,           #grad_A::RealVector
 			VEC0,           #grad_u::RealVector
 			VEC0,           #grad_w::RealVector
 			0,              #best_match_id::Int64
@@ -321,12 +327,12 @@ end
 # ==============
 
 function move!(p::Particle, dt::Float64)
-	if p.type == FLUID
+	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.x += dt * p.v
 	end
 end
 
-function accelerate!(p::Particle, dt::Float64, g::Float64, γ::Float64, z_t::Float64, z_β::Float64, γ_r::Float64, P_floor)
+function accelerate!(p::Particle, dt::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
 	if p.type == FLUID
 		p.v += 0.5 * dt * (p.Dv + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
@@ -345,21 +351,22 @@ function verlet_step!(sys, global_params, sim_params)
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, h_m, a, z_t, z_β = global_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
 
 	# compute derived parameter
 	h0 = η * dr
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
+	K = g / (R_mass * T_bg)
 	
 	# half-step acceleration & drift
-	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
+	apply!(sys, p -> accelerate!(p, dt, z_t, z_β, γ_r))
 	apply!(sys, p -> move!(p, dt))
 	
 	# lifecycle management: teleport particles at the outflow to the inflow and set correct values for them
 	manage_particle_lifecycle!(sys, dr, K, dom_length)
-	apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass))
+	apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass, γ))
 
 	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
@@ -400,9 +407,9 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
 
 	# compute the forces
-	apply!(sys, p -> reset_acceleration!)
+	apply!(sys, p -> reset_acceleration!(p))
 	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ))
-	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
+	apply!(sys, p -> accelerate!(p, dt, z_t, z_β, γ_r))
 end
 
 # ==============
@@ -500,5 +507,3 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	return run_dir
 end
 end # module
-
-

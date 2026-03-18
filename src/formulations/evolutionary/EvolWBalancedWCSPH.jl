@@ -32,7 +32,13 @@ include(srcdir("core", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
-include(srcdir("core", "ebc_boundaries.jl"))
+include(srcdir("core", "bc", "ebc_shared.jl"))
+
+# ==============
+# INCLUDE FORMULATION-SPECIFIC SCRIPTS
+# ==============
+
+include(srcdir("core", "bc", "ebc_wcsph.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -294,7 +300,7 @@ end
 # ==============
 
 function move!(p::Particle, dt::Float64)
-	if p.type == FLUID
+	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.x += dt * p.v
 	end
 end
