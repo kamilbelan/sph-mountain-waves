@@ -25,10 +25,6 @@ using CSV
 using Parameters 
 using LinearAlgebra
 
-const FLUID = 0.0
-const WALL = 1.0
-const MOUNTAIN = 2.0
-
 
 # ==============
 # INCLUDE CORE SCRIPTS

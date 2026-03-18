@@ -1,7 +1,7 @@
 # spatial and temporal resolution
-dr = [346.0]            # 26e3/25 = 1040.0, 26e3/50 = 520.0, 26e4/75 = 346.0 , 26e3/100 = 260.0
+dr = [520.0]            # 26e3/25 = 1040.0, 26e3/50 = 520.0, 26e4/75 = 346.0 , 26e3/100 = 260.0
 dt_rel = [0.1]           #this will be multiplied by h0/c
-t_end  = [20.0]         
+t_end  = [5.0]         
 
 # numerics
 rho_floor = [1e-6]
@@ -23,7 +23,9 @@ v_initial = [20.0]
 #    StaticWBalancedHopkins
 #    StaticWBalancedPThetaHopkins
 #    EvolStandardWCSPH 
-formulation = ["EvolStandardWCSPH"]
+#    EvolWBalancedWCSPH 
+#    EvolWBalancedHopkins
+formulation = ["EvolWBalancedHopkins", "EvolWBalancedWCSPH"]
 
 
 
