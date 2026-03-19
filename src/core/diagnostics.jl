@@ -15,10 +15,14 @@ Calculate and return the average velocity magnitude of all particles in the syst
 
 function avg_velocity(sys::ParticleSystem)::Float64
 	v = 0.0
+	count = 0.0
 	for p in sys.particles
-		v += SmoothedParticles.norm(p.v)
+		if p.type == FLUID
+			v += SmoothedParticles.norm(p.v)
+			count += 1.0
+		end
 	end
-	v = v / length(sys.particles)
+	v = v / count
 	return v
 end
 
@@ -29,7 +33,7 @@ Calculate and return the maximal velocity magnitude of all particles in the syst
 """
 
 function max_velocity(sys::ParticleSystem)::Float64
-	v = maximum(SmoothedParticles.norm(p.v) for p in sys.particles)
+	v = maximum(SmoothedParticles.norm(p.v) for p in sys.particles if p.type == FLUID)
 	return v
 end
 
@@ -38,11 +42,12 @@ end
 
 Compute the total energy (kinetic + potential) of the fluid system.
 """
-
 function energy(sys::ParticleSystem, g::Float64)::Float64
 	E = 0.0
 	for p in sys.particles
-		E += 0.5 * p.ρ * SmoothedParticles.dot(p.v, p.v) + p.ρ * g * p.x[2]
+		if p.type == FLUID
+			E += 0.5 * p.ρ * SmoothedParticles.dot(p.v, p.v) + p.ρ * g * p.x[2]
+		end
 	end
 	return E
 end
