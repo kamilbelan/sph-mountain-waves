@@ -48,8 +48,8 @@ function apply_extrapolation!(sys::ParticleSystem)
 			p.v = RealVector(u, w, 0.0)
 		end
 
-		if p.type == MOUTANI && p.best_match_id > 0
-			q = sys.particles[p_best_match_id]
+		if p.type == MOUNTAIN && p.best_match_id > 0
+			q = sys.particles[p.best_match_id]
 			dx = p.x - q.x
 			p.A = q.A + SmoothedParticles.dot(dx, q.grad_A)
 		end

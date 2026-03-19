@@ -388,9 +388,12 @@ function verlet_step!(sys, global_params, sim_params)
 	# extrapolate ρ, v to the ghost particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
 	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
-	apply!(sys, p -> reset_ebc_search!(p))
-	apply!(sys, (p, q, r) -> search_best_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_ghost_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_mountain_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
 	apply_extrapolation!(sys)
+	apply_mountain_freeslip!(sys, h_m, a)
 
 	# compute pressure
 	apply!(sys, p -> reset_pressure!(p, γ))

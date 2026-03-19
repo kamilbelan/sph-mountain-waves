@@ -286,12 +286,12 @@ end
 	p.Dρ = 0.0
 end
 
-@inbounds function update_ghost_density_perturbation!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
-    if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)
-        # Background density is strictly a function of the ghost's fixed y-coordinate
-        p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-        p.ρ′ = p.ρ - p.ρ_bg
-    end
+@inbounds function update_density_perturbation!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
+	if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST) || (p.type == MOUNTAIN)
+		# Background density is strictly a function of the ghost's fixed y-coordinate
+		p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
+		p.ρ′ = p.ρ - p.ρ_bg
+	end
 end
 
 
@@ -344,15 +344,18 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
 	
-	# extrapolate ρ, v to the ghost particles at the boundaries
+	# extrapolate ρ, v to the ghost and mountain particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
 	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
-	apply!(sys, p -> reset_ebc_search!(p))
-	apply!(sys, (p, q, r) -> search_best_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_ghost_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_mountain_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
 	apply_extrapolation!(sys)
+	apply_mountain_freeslip!(sys, h_m, a)
 
-	# set correct density values to the ghost particles
-	apply!(sys, p -> update_ghost_density_perturbation!(p, ρ0, T_bg, g, R_mass))
+	# set correct density values to the ghost and mountain particles
+	apply!(sys, p -> update_density_perturbation!(p, ρ0, T_bg, g, R_mass))
 
 	# reset rates 
 	apply!(sys, p -> reset_acceleration!(p))
