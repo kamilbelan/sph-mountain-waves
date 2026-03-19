@@ -35,6 +35,7 @@ Extrapolates the density and velocity of the ghost particles in `sys` using the 
 """
 function apply_extrapolation!(sys::ParticleSystem)
 	for p in sys.particles
+
 		if ((p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST)) && p.best_match_id > 0
 			# retrieve the closest particle
 			q = sys.particles[p.best_match_id]
@@ -46,6 +47,12 @@ function apply_extrapolation!(sys::ParticleSystem)
 			u = q.v[1] + SmoothedParticles.dot(dx, q.grad_u)
 			w = q.v[2] + SmoothedParticles.dot(dx, q.grad_w)
 			p.v = RealVector(u, w, 0.0)
+		end
+
+		if p.type == MOUNTAIN && p.best_match_id > 0
+			q = sys.particles[p.best_match_id]
+			dx = p.x - q.x
+			p.ρ = q.ρ + SmoothedParticles.dot(dx, q.grad_ρ)
 		end
 	end
 	

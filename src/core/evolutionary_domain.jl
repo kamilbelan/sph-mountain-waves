@@ -5,11 +5,10 @@ import SmoothedParticles: Grid2, covering, is_inside, boundarybox, RealVector, S
 
 # declare particle types
 const FLUID = 0.0
-const WALL = 1.0
-const MOUNTAIN = 2.0
-const INFLOW_GHOST = 3.0
-const INFLOW_INCOMING = 4.0
-const OUTFLOW_GHOST = 5.0
+const MOUNTAIN = 1.0
+const INFLOW_GHOST = 2.0
+const INFLOW_INCOMING = 3.0
+const OUTFLOW_GHOST = 4.0
 
 """
     ExpGrid(dr, K)
@@ -240,10 +239,12 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 				    (dom_length/2 <= x[1] < dom_length/2 + 3.1*local_a(x[2])) && 
 				    (0 <= x[2] <= dom_height)
 				    )
+	# specify the top lid
+	top_lid_spec = Specification(fence, x -> (x[2] > dom_height))
 
 	## THE REST ##
 	# what is not specified is the fence's wall
-	fence_wall = fence - inflow_incoming_spec - inflow_ghost_spec - outflow_ghost_spec
+	fence_wall = fence - inflow_incoming_spec - inflow_ghost_spec - outflow_ghost_spec - top_lid_spec
 
 	# AD HOC 3.0!
 	sys = ParticleSystem(Particle, domain + fence, 3.0*h0)
@@ -253,7 +254,7 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 
 	# domain + walls
 	generate_particles!(sys, grid, domain, x -> Particle(x, initial_velocity, FLUID, global_params, sim_params))
-	generate_particles!(sys, grid, fence_wall, x -> Particle(x, VEC0, WALL, global_params, sim_params))
+	generate_particles!(sys, grid, fence_wall, x -> Particle(x, VEC0, MOUNTAIN, global_params, sim_params))
 
 	# outflow and inflow
 	generate_particles!(sys, grid, inflow_incoming_spec, x -> Particle(x, initial_velocity, INFLOW_INCOMING, global_params, sim_params))
