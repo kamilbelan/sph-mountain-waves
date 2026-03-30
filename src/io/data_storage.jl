@@ -181,11 +181,31 @@ function generate_sph_xdmf(run_dir::String)
 	  </DataItem>
 	  </Attribute>
 
-	  <Attribute Name="Particle_Type" AttributeType="Scalar" Center="Node">
+	  <Attribute Name="Temperature" AttributeType="Scalar" Center="Node">
+	  <DataItem Dimensions="$N" NumberType="Float" Precision="8" Format="HDF">
+	  $filename:/temperatures
+	  </DataItem>
+	  </Attribute>
+
+	  <Attribute Name="Potential temperature" AttributeType="Scalar" Center="Node">
+	  <DataItem Dimensions="$N" NumberType="Float" Precision="8" Format="HDF">
+	  $filename:/pot_temperatures
+	  </DataItem>
+	  </Attribute>
+
+          <Attribute Name="Potential temperature perturbation" AttributeType="Scalar" Center="Node">
+	  <DataItem Dimensions="$N" NumberType="Float" Precision="8" Format="HDF">
+	  $filename:/pot_temperatures_pert
+	  </DataItem>
+	  </Attribute>
+
+	  <Attribute Name="Particle type" AttributeType="Scalar" Center="Node">
 	  <DataItem Dimensions="$N" NumberType="Float" Precision="8" Format="HDF">
 	  $filename:/types
 	  </DataItem>
 	  </Attribute>
+
+
 	  </Grid>
 	  """)
 			end
