@@ -1,7 +1,7 @@
 #!/bin/bash -l
-#SBATCH --job-name=SPH_static
-#SBATCH --output=logs/SPH_static-%j.out
-#SBATCH --error=logs/SPH_static-%j.err
+#SBATCH --job-name=SPH
+#SBATCH --output=logs/SPH-%j.out
+#SBATCH --error=logs/SPH-%j.err
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -11,6 +11,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=slurm@kamilbelan.anonaddy.com
 
+set -euo pipefail
 
 # ==============================================================================
 # USAGE: sbatch submit_batch.sh config/global_params.toml configs/sim_params.toml 
@@ -32,9 +33,15 @@ fi
 GLOBAL_CONF=$1
 SIM_CONF=$2
 
+# derive a meaningful job name from the experiment folder (e.g. "2026_01_09_highres") and update the job name visible in squeue
+JOB_NAME=$(basename "$(dirname "$GLOBAL_CONF")")
+scontrol update JobId=$SLURM_JOB_ID Name="$JOB_NAME" 2>/dev/null || true
+
 echo "=== JOB START $(date) on $(hostname) ==="
+echo "   Job Name:      $JOB_NAME"
 echo "   Global Config: $GLOBAL_CONF"
 echo "   Sweep Config:  $SIM_CONF"
+echo "   Git commit:    $(git rev-parse --short HEAD)"
 
 # ==============================================================================
 # ENVIRONMENT SETUP
@@ -55,6 +62,8 @@ JULIA_BIN=/usr/work/belank/software/julia-1.12.4/bin/julia
 # ==============================================================================
 # EXECUTION
 # ==============================================================================
+
+mkdir -p logs
 
 # run the script, passing the config files as arguments
 $JULIA_BIN --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
