@@ -42,3 +42,6 @@
 # make sure to not include lgos and simulation output
 data/
 logs/
+
+# ignore remote files
+remote/
