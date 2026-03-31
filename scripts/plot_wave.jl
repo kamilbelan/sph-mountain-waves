@@ -1,4 +1,4 @@
-using CairoMakie, Glob, HDF5
+using CairoMakie, Glob, HDF5, JLD2
 
 function bin_to_grid(x, y, vals, xi, yi)
 	grid   = fill(NaN32, length(yi), length(xi))
@@ -24,6 +24,10 @@ function plot_wave(run_dir::String)
 	plots_dir = joinpath(run_dir, "plots")
 	mkpath(plots_dir)
 
+	# read dr from stored metadata
+	meta_file = first(glob("*.jld2", run_dir))
+	dr = jldopen(meta_file)["dr"] / 1e3  # convert m -> km
+
 	# pick the last frame in a robust way
 	last_frame = last(sort(glob("frame_*.h5", run_dir)))
 
@@ -42,9 +46,12 @@ function plot_wave(run_dir::String)
 	v_y = vel[2, mask]
 	θ = theta[mask]
 
-	# bin particles onto a regular grid
-	xi = LinRange(minimum(x), maximum(x), 400)
-	yi = LinRange(0, 26, 200)
+	# bin particles onto a regular grid 
+	# it is made sure that cell size matches particle spacing
+	Nx = round(Int, (maximum(x) - minimum(x)) / dr)
+	Ny = round(Int, 26.0 / dr)
+	xi = LinRange(minimum(x), maximum(x), Nx)
+	yi = LinRange(0, 26, Ny)
 	v_y_grid = bin_to_grid(x, y, v_y, xi, yi)
 	θ_grid   = bin_to_grid(x, y, θ,   xi, yi)
 
