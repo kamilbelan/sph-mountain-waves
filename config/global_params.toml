@@ -14,7 +14,6 @@ N        = 0.13999999999999999 # sqrt(0.0196),
 # geometry
 dom_height = 26e3
 dom_length = 400e3
-h_m        = 1000.0
 a          = 10e3
 z_t        = 26e3
 z_beta     = 12e3

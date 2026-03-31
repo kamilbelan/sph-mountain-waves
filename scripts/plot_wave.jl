@@ -1,4 +1,23 @@
-using CairoMakie, Glob, HDF5, NaturalNeighbours 
+using CairoMakie, Glob, HDF5
+
+function bin_to_grid(x, y, vals, xi, yi)
+	grid   = fill(NaN32, length(yi), length(xi))
+	counts = zeros(Int, length(yi), length(xi))
+	dx = xi[2] - xi[1]
+	dy = yi[2] - yi[1]
+	for k in eachindex(x)
+		i = round(Int, (x[k] - xi[1]) / dx) + 1
+		j = round(Int, (y[k] - yi[1]) / dy) + 1
+		if 1 <= i <= length(xi) && 1 <= j <= length(yi)
+			grid[j, i]   = isnan(grid[j, i]) ? vals[k] : grid[j, i] + vals[k]
+			counts[j, i] += 1
+		end
+	end
+	for idx in eachindex(grid)
+		counts[idx] > 0 && (grid[idx] /= counts[idx])
+	end
+	return grid
+end
 
 function plot_wave(run_dir::String)
 	# create a directory plots next to the simulation output
@@ -9,7 +28,6 @@ function plot_wave(run_dir::String)
 	last_frame = last(sort(glob("frame_*.h5", run_dir)))
 
 	# load the data from the last frame
-
 	pos, vel, theta, types = h5open(last_frame, "r") do fid
 		(read(fid["positions"]),
 			read(fid["velocities"]),
@@ -24,16 +42,11 @@ function plot_wave(run_dir::String)
 	v_y = vel[2, mask]
 	θ = theta[mask]
 
-	# interpolate for a line plot
-	points = Matrix(hcat(x,y)') # create a 2 x N points matrix
-	itp_v_y = interpolate(points, v_y)
-	itp_θ = interpolate(points, θ)
-
-	# create a regular grid
-	xi = LinRange(minimum(x), maximum(x), 800)
-	yi = LinRange(0, 26, 400)
-	v_y_grid = [itp_v_y(xj, yj) for yj in yi, xj in xi]
-	θ_grid = [itp_θ(xj, yj) for yj in yi, xj in xi]
+	# bin particles onto a regular grid
+	xi = LinRange(minimum(x), maximum(x), 400)
+	yi = LinRange(0, 26, 200)
+	v_y_grid = bin_to_grid(x, y, v_y, xi, yi)
+	θ_grid   = bin_to_grid(x, y, θ,   xi, yi)
 
 	#  plot as in Doyle et. al
 	fig = Figure(size=(900, 450))
@@ -46,8 +59,8 @@ function plot_wave(run_dir::String)
 	Colorbar(fig[1,2], cf, label="w (m s⁻¹)")
 
 	contour!(ax, xi, yi, θ_grid',
-	  levels=250:10:400,
-	  color=:black, linewidth=0.5)
+		levels=250:10:400,
+		color=:black, linewidth=0.5)
 
 	# save as a pdf
 	filepath = joinpath(plots_dir, "mountain_wave.pdf")

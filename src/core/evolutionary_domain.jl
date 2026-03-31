@@ -196,8 +196,8 @@ Creates the system's geometry and places particles of type `Particle in the posi
 function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	# unpack needed parameters
 
-	@unpack dom_height, dom_length, h_m, a = global_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
+	@unpack dom_height, dom_length, a = global_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial, h_m = sim_params
 	@unpack g, R_mass, T_bg = global_params
 
 	K = g / (R_mass * T_bg)
