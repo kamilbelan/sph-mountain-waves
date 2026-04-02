@@ -165,9 +165,11 @@ end
 	p.P_bg += (q.m / θ_0) * p.θ_bg * ker
 end
 
-@inbounds function finalize_pressure!(p::Particle, γ::Float64)
-	p.P = p.P^γ
-	p.P_bg = p.P_bg^γ
+@inbounds function finalize_pressure!(p::Particle, γ::Float64, P_floor::Float64)
+	pP = max(p.P, P_floor)
+	pP_bg = max(p.P_bg, P_floor)
+	p.P = pP^γ
+	p.P_bg = pP_bg^γ
 end
 
 # ==============
@@ -381,7 +383,7 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> reset_pressure!(p, θ_0))
 	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
-	apply!(sys, p -> finalize_pressure!(p, γ))
+	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
 
 	# compute temperature 
 	apply!(sys, p -> find_temperature!(p, R_mass))
@@ -444,7 +446,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, p -> reset_pressure!(p, θ_0))
 	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
-	apply!(sys, p -> finalize_pressure!(p, γ))
+	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
 
 	# compute temperature 
 	apply!(sys, p -> find_temperature!(p, R_mass))
