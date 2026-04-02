@@ -28,7 +28,7 @@ v_initial = [20.0]
 #    EvolWBalancedWCSPH 
 #    EvolWBalancedHopkins
 #    EvolWBalancedThetaHopkins
-formulation = ["EvolWBalancedHopkins","EvolWBalancedWCSPH"]
+formulation = ["EvolWBalancedThetaHopkins","EvolWBalancedHopkins","EvolWBalancedWCSPH"]
 
 
 
