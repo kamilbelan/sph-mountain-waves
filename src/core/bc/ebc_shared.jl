@@ -93,7 +93,7 @@ of the nearest fluid particle's velocity, then reflecting the normal component.
 """
 function apply_mountain_freeslip!(sys::ParticleSystem, h_m::Float64, a::Float64)
 	for p in sys.particles
-		if p.type == MOUNTAIN && p.best_match_id > 0
+		if p.type == MOUNTAIN && p.best_match_id > 0 && p.best_match_id <= length(sys.particles)
 			# retrieve the closest particle
 			q = sys.particles[p.best_match_id]
 			dx = p.x - q.x
