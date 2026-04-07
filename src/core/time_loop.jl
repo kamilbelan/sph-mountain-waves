@@ -39,30 +39,36 @@ function time_loop(global_params::Dict,
 	t = 0.0
 	write_frame!(run_dir, sys, frame_counter, t)
 
-	for k = 1:nsteps
-		t = k * dt
-		step_function!(sys)
+	save_interval = max(1, Int(round(dt_frame / dt)))
 
-		save_interval = max(1, Int(round(dt_frame / dt)))
-		if k % save_interval == 0
-			@show t
-			println("num. of particles = ", length(sys.particles))
+	# introduce a try-catch block to obtain the xdmf fail even when the sim crashes
+	try
+		for k = 1:nsteps
+			t = k * dt
+			step_function!(sys)
 
-			u_avg = avg_velocity(sys)
-			@show u_avg
-			push!(average_velocities, (t, u_avg))
+			if k % save_interval == 0
+				@show t
+				println("num. of particles = ", length(sys.particles))
 
-			u_max = max_velocity(sys)
-			@show u_max
-			push!(maximum_velocities, (t, u_max))
+				u_avg = avg_velocity(sys)
+				@show u_avg
+				push!(average_velocities, (t, u_avg))
 
-			E = energy(sys, g)
-			@show E
-			push!(energies, (t, E))
+				u_max = max_velocity(sys)
+				@show u_max
+				push!(maximum_velocities, (t, u_max))
 
-			# write the data at the given time to a h5 file
-			write_frame!(run_dir, sys, frame_counter, t)
-			frame_counter += 1
-		end # if
-	end # for
+				E = energy(sys, g)
+				@show E
+				push!(energies, (t, E))
+
+				# write the data at the given time to a h5 file
+				write_frame!(run_dir, sys, frame_counter, t)
+				frame_counter += 1
+			end # if
+		end # for
+	catch e
+		@warn "Time loop terminated TOO early" exception=(e, catch_backtrace())
+	end
 end # function
