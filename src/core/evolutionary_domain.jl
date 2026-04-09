@@ -246,8 +246,11 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	# what is not specified is the fence's wall
 	fence_wall = fence - inflow_incoming_spec - inflow_ghost_spec - outflow_ghost_spec - top_lid_spec
 
-	# AD HOC 3.0!
-	sys = ParticleSystem(Particle, domain + fence, 3.0*h0)
+	# compute the largest smoothing length
+	h_top = η * s_max * a_factor
+	
+	# initialize the system
+	sys = ParticleSystem(Particle, domain + fence, 2.0*h_top)
 
 	# initial velocity
 	initial_velocity = v_initial * VECX
@@ -260,6 +263,11 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	generate_particles!(sys, grid, inflow_incoming_spec, x -> Particle(x, initial_velocity, INFLOW_INCOMING, global_params, sim_params))
 	generate_particles!(sys, grid, inflow_ghost_spec, x -> Particle(x, initial_velocity, INFLOW_GHOST, global_params, sim_params))
 	generate_particles!(sys, grid, outflow_ghost_spec, x -> Particle(x, initial_velocity, OUTFLOW_GHOST, global_params, sim_params))
+
+	# set the smoothing length using the particle's altitude
+	for p in sys.particles
+		p.h = η * dr * exp(K * max(0.0, p.x[2]) / 2.0) * a_factor
+	end
 
 	create_cell_list!(sys)
 

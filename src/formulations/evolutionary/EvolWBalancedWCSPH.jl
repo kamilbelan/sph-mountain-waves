@@ -200,11 +200,15 @@ end
 # ==============
 
 @inbounds function balance_of_smoothing!(p::Particle)
-	p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
+	if p.type == FLUID || INFLOW_INCOMING
+		p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
+	end
 end
 
 @inbounds function compute_smoothing!(p::Particle, dt::Float64)
-	p.h += p.Dh * dt
+	if p.type == FLUID || INFLOW_INCOMING
+		p.h += p.Dh * dt
+	end
 
 end
 
@@ -240,30 +244,32 @@ end
 # Momentum balance
 # ==============
 @inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ϵ::Float64, rho_floor::Float64, γ::Float64)
-	x_pq = p.x - q.x
-	v_pq = p.v - q.v
-	dot_product = SmoothedParticles.dot(x_pq, v_pq)
+	if p.type == FLUID
+		x_pq = p.x - q.x
+		v_pq = p.v - q.v
+		dot_product = SmoothedParticles.dot(x_pq, v_pq)
 
-	h_ij = 0.5 * (p.h + q.h)
-	ker = rDwendland2(h_ij, r)
+		h_ij = 0.5 * (p.h + q.h)
+		ker = rDwendland2(h_ij, r)
 
-	prho = max(p.ρ, rho_floor)
-	qrho = max(q.ρ, rho_floor)
+		prho = max(p.ρ, rho_floor)
+		qrho = max(q.ρ, rho_floor)
 
-	# pairwise conservative force
-	p.Dv += -q.m * (p.δP / prho^2 + q.δP / qrho^2) * ker * x_pq
-
-	# artificial viscous force
-	if dot_product < 0.0
-		c_i = sqrt(γ * p.P / prho)
-		c_j = sqrt(γ * q.P / qrho)
-		c_ij = 0.5 * (c_i + c_j)
-		ρ_ij = 0.5 * (prho + qrho)
-		μ_ij = (h_ij * dot_product) / (r * r + ϵ * h_ij * h_ij)
-		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
+		# pairwise conservative force
+		p.Dv += -q.m * (p.δP / prho^2 + q.δP / qrho^2) * ker * x_pq
 
 		# artificial viscous force
-		p.Dv += -q.m * π_ij * ker * x_pq
+		if dot_product < 0.0
+			c_i = sqrt(γ * p.P / prho)
+			c_j = sqrt(γ * q.P / qrho)
+			c_ij = 0.5 * (c_i + c_j)
+			ρ_ij = 0.5 * (prho + qrho)
+			μ_ij = (h_ij * dot_product) / (r * r + ϵ * h_ij * h_ij)
+			π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
+
+			# artificial viscous force
+			p.Dv += -q.m * π_ij * ker * x_pq
+		end
 	end
 
 end

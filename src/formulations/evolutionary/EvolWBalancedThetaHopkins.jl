@@ -189,12 +189,13 @@ end
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function update_smoothing!(p::Particle, η::Float64, h0::Float64)
-	omega = max(p.Omega, 0.01)
-	# Newton iteration to find the suitable h_new
-	h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
-	p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
-	p.h = min(p.h, 3 * h0) # precaution for massive expansion
+@inbounds function update_smoothing!(p::Particle, η::Float64)
+	if p.type == FLUID || p.type == INFLOW_INCOMING
+		omega = max(p.Omega, 0.01)
+		# Newton iteration to find the suitable h_new
+		h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
+		p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
+	end
 end
 
 # ==============
@@ -222,47 +223,49 @@ end
 # ==============
 
 @inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ε::Float64, rho_floor::Float64, P_floor::Float64, θ_0::Float64, γ::Float64)
-	x_pq = p.x - q.x
-	v_pq = p.v - q.v
-	dot_product = SmoothedParticles.dot(x_pq, v_pq)
+	if p.type == FLUID
+		x_pq = p.x - q.x
+		v_pq = p.v - q.v
+		dot_product = SmoothedParticles.dot(x_pq, v_pq)
 
-	prefac = q.m * p.θ * q.θ / θ_0^2
-	expfac = 1.0 - 2.0 / γ
-	ker_i = rDwendland2(p.h, r)
-	ker_j = rDwendland2(q.h, r)
-	f_i = 1.0 / p.Omega
-	f_j = 1.0 / q.Omega
-	pP = max(P_floor, p.P)
-	qP = max(P_floor, q.P)
+		prefac = q.m * p.θ * q.θ / θ_0^2
+		expfac = 1.0 - 2.0 / γ
+		ker_i = rDwendland2(p.h, r)
+		ker_j = rDwendland2(q.h, r)
+		f_i = 1.0 / p.Omega
+		f_j = 1.0 / q.Omega
+		pP = max(P_floor, p.P)
+		qP = max(P_floor, q.P)
 
-	# acceleration due the gradient of total pressure
-	a_tot = -prefac * (f_i * pP^expfac * ker_i + f_j * qP^expfac * ker_j) * x_pq
+		# acceleration due the gradient of total pressure
+		a_tot = -prefac * (f_i * pP^expfac * ker_i + f_j * qP^expfac * ker_j) * x_pq
 
-	prefac_bg = q.m * p.θ_bg * q.θ_bg  / θ_0^2
-	pP_bg = max(P_floor, p.P_bg)
-	qP_bg = max(P_floor, q.P_bg)
+		prefac_bg = q.m * p.θ_bg * q.θ_bg  / θ_0^2
+		pP_bg = max(P_floor, p.P_bg)
+		qP_bg = max(P_floor, q.P_bg)
 
-	# acceleration due to the gradient of background pressure
-	a_bg = -prefac_bg * (f_i * pP_bg^expfac * ker_i + f_j * qP_bg^expfac * ker_j) * x_pq
+		# acceleration due to the gradient of background pressure
+		a_bg = -prefac_bg * (f_i * pP_bg^expfac * ker_i + f_j * qP_bg^expfac * ker_j) * x_pq
 
-	# total acceleration
-	p.Dv += a_tot - a_bg
-
-	# artificial viscous force
-	if dot_product < 0.0
-		h_ij = 0.5 * (p.h + q.h)
-		ker_ij = rDwendland2(h_ij, r)
-		prho = max(p.ρ, rho_floor)
-		qrho = max(q.ρ, rho_floor)
-		c_i = sqrt(γ * p.P / prho)
-		c_j = sqrt(γ * q.P / qrho)
-		c_ij = 0.5 * (c_i + c_j)
-		ρ_ij = 0.5 * (prho + qrho)
-		μ_ij = (h_ij * dot_product) / (r * r + ε * h_ij * h_ij)
-		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
+		# total acceleration
+		p.Dv += a_tot - a_bg
 
 		# artificial viscous force
-		p.Dv += -q.m * π_ij * ker_ij * x_pq
+		if dot_product < 0.0
+			h_ij = 0.5 * (p.h + q.h)
+			ker_ij = rDwendland2(h_ij, r)
+			prho = max(p.ρ, rho_floor)
+			qrho = max(q.ρ, rho_floor)
+			c_i = sqrt(γ * p.P / prho)
+			c_j = sqrt(γ * q.P / qrho)
+			c_ij = 0.5 * (c_i + c_j)
+			ρ_ij = 0.5 * (prho + qrho)
+			μ_ij = (h_ij * dot_product) / (r * r + ε * h_ij * h_ij)
+			π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
+
+			# artificial viscous force
+			p.Dv += -q.m * π_ij * ker_ij * x_pq
+		end
 	end
 end
 
@@ -360,7 +363,7 @@ function verlet_step!(sys, global_params, sim_params)
 
 		# we in fact do not need the last values, since they will be taken into the balance of momentum
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η, h0))
+			apply!(sys, p -> update_smoothing!(p, η))
 			create_cell_list!(sys)
 		end
 	end
@@ -436,7 +439,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> finalize_number_density!(p))
 
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η, h0))
+			apply!(sys, p -> update_smoothing!(p, η))
 			create_cell_list!(sys)
 		end
 	end
