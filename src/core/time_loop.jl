@@ -38,6 +38,7 @@ function time_loop(global_params::Dict,
 	# save the initial frame
 	t = 0.0
 	write_frame!(run_dir, sys, frame_counter, t)
+	frame_counter += 1
 
 	save_interval = max(1, Int(round(dt_frame / dt)))
 
