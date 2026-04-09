@@ -1,7 +1,7 @@
 # spatial and temporal resolution
-dr = [520.0]            # 26e3/25 = 1040.0, 26e3/50 = 520.0, 26e4/75 = 346.0 , 26e3/100 = 260.0
+dr = [346.0]            # 26e3/25 = 1040.0, 26e3/50 = 520.0, 26e4/75 = 346.0 , 26e3/100 = 260.0
 dt_rel = [0.1]           #this will be multiplied by h0/c
-t_end  = [1.0]         
+t_end  = [600.0]         
 
 # numerics
 rho_floor = [1e-6]
@@ -13,7 +13,7 @@ beta = [0.2]              # usually β = 2 α
 gamma_r_rel = [1.5]        # this will be multiplied by N = sqrt(0.0196)
 
 # mountain geometry
-h_m = [100.0]
+h_m = [0.0]
 
 # initial conditions
 v_initial = [20.0]
@@ -29,7 +29,6 @@ v_initial = [20.0]
 #    EvolWBalancedHopkins
 #    EvolWBalancedThetaHopkins
 formulation = ["EvolWBalancedThetaHopkins", "EvolWBalancedWCSPH", "EvolWBalancedHopkins"]
-#formulation = ["EvolWBalancedThetaHopkins"]
 
 
 
