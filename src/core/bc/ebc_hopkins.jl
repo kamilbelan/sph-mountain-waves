@@ -18,7 +18,8 @@ end
 Computes the gradient grad_δA, grad_u, grad_w using a SPH sum
 """
 function compute_ebc_gradients!(p::AbstractParticle, q::AbstractParticle, r::Float64)
-	@inbounds if (p.type == FLUID) || (p.type == INFLOW_INCOMING)
+	@inbounds if (p.type == FLUID || p.type == INFLOW_INCOMING) &&
+	             (q.type == FLUID || q.type == INFLOW_INCOMING)
 		x_pq = p.x - q.x
 		ker = q.m * rDwendland2(p.h, r)
 
