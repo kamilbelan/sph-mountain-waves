@@ -201,7 +201,6 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	@unpack g, R_mass, T_bg = global_params
 
 	K = g / (R_mass * T_bg)
-	h0 = η * dr
 
 	# derive bc_width from the maximal spacing
 	a_factor = (4/3)^(1/4)
