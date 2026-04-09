@@ -200,13 +200,13 @@ end
 # ==============
 
 @inbounds function balance_of_smoothing!(p::Particle)
-	if p.type == FLUID || INFLOW_INCOMING
+	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
 	end
 end
 
 @inbounds function compute_smoothing!(p::Particle, dt::Float64)
-	if p.type == FLUID || INFLOW_INCOMING
+	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.h += p.Dh * dt
 	end
 
@@ -356,7 +356,7 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
 	
-	# extrapolate ρ, v to the ghost and mountain particles at the boundaries
+	# extrapolate δρ, v to the ghost and mountain particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
 	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
 	apply!(sys, p -> reset_ghost_ebc_search!(p))
@@ -415,6 +415,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
+	K = g / (R_mass * T_bg)
 	γ_r = γ_r_rel * N
 
 	# create the particle system
@@ -424,15 +425,22 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# Initialization of the physical fields
 	# ==============
 	
-	# set the initial velocity to the whole bulk
-	#apply!(sys, p -> set_bulk_velocity!(p, v_initial))
-	
 	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
 
 	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
 	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+	
+	# extrapolate δρ, v to the ghost and mountain particles at the boundaries
+	apply!(sys, p -> reset_ebc_gradients!(p))
+	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
+	apply!(sys, p -> reset_ghost_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_mountain_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass)
+	apply_mountain_freeslip!(sys, h_m, a)
 
 	# compute acceleration (balance of momentum)
 	apply!(sys, p -> reset_acceleration!(p))

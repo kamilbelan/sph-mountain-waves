@@ -395,7 +395,7 @@ function verlet_step!(sys, global_params, sim_params)
 	# entropy has to be computed before the EBC procedure!
 	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	
-	# extrapolate A, v to the ghost particles at the boundaries
+	# extrapolate δA, v to the ghost particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
 	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
 	apply!(sys, p -> reset_ghost_ebc_search!(p))
@@ -439,6 +439,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# compute derived parameters
 	h0 = η * dr
 	c = sqrt(65e3 * (γ) / ρ0)
+	K = g / (R_mass * T_bg)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
 
@@ -469,9 +470,23 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 
+	# entropy has to be computed before the EBC procedure!
+	# this is redundant (the initialization is done in the constructer), but added for code readability
+	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
+	
+	# extrapolate δA, v to the ghost particles at the boundaries
+	apply!(sys, p -> reset_ebc_gradients!(p))
+	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
+	apply!(sys, p -> reset_ghost_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_mountain_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, γ)
+	apply_mountain_freeslip!(sys, h_m, a)
+
+
 	# initialization of the pressure
 	apply!(sys, p -> reset_pressure!(p, γ))
-	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
 

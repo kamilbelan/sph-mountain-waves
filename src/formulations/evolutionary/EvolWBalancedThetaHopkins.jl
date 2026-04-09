@@ -372,10 +372,12 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 
+	# compute temperature and potential temperature
 	# the potential temperature has to be computed before EBC procedure!
+	apply!(sys, p -> find_temperature!(p, R_mass))
 	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
 	
-	# extrapolate θ, v to the ghost particles at the boundaries
+	# extrapolate δθ, v to the ghost particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
 	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
 	apply!(sys, p -> reset_ghost_ebc_search!(p))
@@ -389,9 +391,6 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, p -> reset_pressure!(p, θ_0))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
 	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
-
-	# compute temperature 
-	apply!(sys, p -> find_temperature!(p, R_mass))
 
 	# compute the forces
 	apply!(sys, p -> reset_acceleration!(p))
@@ -420,6 +419,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
+	K = g / (R_mass * T_bg)
 	γ_r = γ_r_rel * N
 	P_0 = ρ0 * R_mass * T_bg
 	θ_0 = (P_0^((γ - 1) / γ)) / R_mass
@@ -448,19 +448,29 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 
-	# initialization of the pressure
-	apply!(sys, p -> reset_pressure!(p, θ_0))
+	# compute temperature and potential temperature 
+	# the potential temperature has to be computed before EBC procedure!
+	apply!(sys, p -> find_temperature!(p, R_mass))
 	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
+
+	# extrapolate δθ, v to the ghost particles at the boundaries
+	apply!(sys, p -> reset_ebc_gradients!(p))
+	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
+	apply!(sys, p -> reset_ghost_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+	apply!(sys, p -> reset_mountain_ebc_search!(p))
+	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, R_gas)
+	apply_mountain_freeslip!(sys, h_m, a)
+	
+        # initialization of the pressure
+	apply!(sys, p -> reset_pressure!(p, θ_0))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
 	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
-
-	# compute temperature 
-	apply!(sys, p -> find_temperature!(p, R_mass))
 
 	# compute acceleration (balance of momentum)
 	apply!(sys, p -> reset_acceleration!(p))
 	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
-	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 
 	# ==============
 	# Output handling
