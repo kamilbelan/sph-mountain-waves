@@ -161,8 +161,8 @@ end
 
 @inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, θ_0::Float64)
 	ker = wendland2(p.h, r)
-	p.P += (q.m / θ_0) * p.θ * ker
-	p.P_bg += (q.m / θ_0) * p.θ_bg * ker
+	p.P += (q.m / θ_0) * q.θ * ker
+	p.P_bg += (q.m / θ_0) * q.θ_bg * ker
 end
 
 @inbounds function finalize_pressure!(p::Particle, γ::Float64, P_floor::Float64)
@@ -304,7 +304,7 @@ end
 # ==============
 
 function move!(p::Particle, dt::Float64)
-	if p.type == FLUID
+	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.x += dt * p.v
 	end
 end
