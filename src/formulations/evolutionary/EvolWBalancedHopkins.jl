@@ -59,19 +59,20 @@ mutable struct Particle <: AbstractParticle
 	ρ::Float64        # total density
 	n::Float64        # number density
 	Omega::Float64    # ∇h correction factor
-	P_bg::Float64     # background pressure
 	P::Float64        # total pressure
-	θ_bg::Float64     # background potential temperature
-	θ′::Float64       # potential temperature perturbation
+	P_bg::Float64     # background pressure
 	θ::Float64        # total potential temperature
-	T_bg::Float64     # background temperature
+	θ_bg::Float64     # background potential temperature
+	δθ::Float64       # potential temperature perturbation
 	T::Float64        # total temperature
+	T_bg::Float64     # background temperature
         A::Float64        # entropy-like variable
-        A_bg::Float64     # entropy-like variable
+        A_bg::Float64     # background entropy
+	δA::Float64       # entropy perturbation
 	type::Float64     # particle type
 	id::Int64              # the index of the particle in sys.particles
 	spawn_y::Float64       # the altitude it was generated at
-	grad_A::RealVector     # ∇A
+	grad_δA::RealVector     # ∇δA
 	grad_u::RealVector     # ∇u (x-velocity gradient)
 	grad_w::RealVector     # ∇w (y-velocity gradient)
 	best_match_id::Int64   # rd of the fluid particle 'e'
@@ -96,19 +97,20 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # ρ
 			0.0,            # n
 			0.0,            # Omega
-			0.0,            # P_bg
 			0.0,            # P
-			0.0,            # θ_bg 
-			0.0,            # θ′ 
+			0.0,            # P_bg
 			0.0,            # θ 
-			0.0,            # T_bg
+			0.0,            # θ_bg 
+			0.0,            # δθ 
 			0.0,            # T
+			0.0,            # T_bg
 			0.0,            # A
                         0.0,            # A_bg
+			0.0,            # δA
 			type,           # type
 	                0,              # the index of the particle in sys.particles
 			0.0,            #spawn_y::Float64
-			VEC0,           #grad_A::RealVector
+			VEC0,           #grad_δA::RealVector
 			VEC0,           #grad_u::RealVector
 			VEC0,           #grad_w::RealVector
 			0,              #best_match_id::Int64
@@ -127,11 +129,12 @@ mutable struct Particle <: AbstractParticle
 		obj.P = 0.0 # needs SPH sum!
 
 		obj.A_bg = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
+		obj.δA = 0.0
 		obj.A = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
-		obj.θ = obj.θ′ + obj.θ_bg
+		obj.δθ = 0.0
+		obj.θ = obj.δθ + obj.θ_bg
 
 		obj.spawn_y = obj.x[2]
 		return obj
@@ -192,6 +195,7 @@ end
 
 @inbounds function compute_entropy!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, γ::Float64)
 	p.A_bg = background_entropy(p.x[2], ρ0, T_bg, g, R_mass, γ)
+	p.δA = p.A - p.A_bg
 end
 
 @inbounds function find_temperature!(p::Particle, R_mass::Float64)
@@ -201,7 +205,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
         p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 # ==============
@@ -384,6 +388,9 @@ function verlet_step!(sys, global_params, sim_params)
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
+
+	# entropy has to be computed before the EBC procedure!
+	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	
 	# extrapolate A, v to the ghost particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
@@ -392,12 +399,11 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
 	apply!(sys, p -> reset_mountain_ebc_search!(p))
 	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-	apply_extrapolation!(sys)
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, γ)
 	apply_mountain_freeslip!(sys, h_m, a)
 
 	# compute pressure
 	apply!(sys, p -> reset_pressure!(p, γ))
-	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
 

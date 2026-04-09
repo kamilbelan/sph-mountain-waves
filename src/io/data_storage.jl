@@ -88,7 +88,7 @@ function write_frame!(run_dir::String, sys::ParticleSystem, frame_counter::Int, 
 		pressures[i] = p.P
 		temperatures[i] = p.T
 		pot_temperatures[i] = p.θ
-		pot_temperatures_pert[i] = p.θ′
+		pot_temperatures_pert[i] = p.δθ
 
 		types[i] = p.type
 	end
