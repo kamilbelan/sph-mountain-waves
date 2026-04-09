@@ -59,17 +59,17 @@ mutable struct Particle <: AbstractParticle
 	ρ::Float64        # total density
 	n::Float64        # number density
 	Omega::Float64    # ∇h correction factor
-	P_bg::Float64     # background pressure
 	P::Float64        # total pressure
-	θ_bg::Float64     # bakcground potential temperature
-	θ′::Float64       # potential temperature perturbation
+	P_bg::Float64     # background pressure
 	θ::Float64        # total potential temperature
+	θ_bg::Float64     # bakcground potential temperature
+	δθ::Float64       # potential temperature perturbation
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
 	type::Float64     # particle type
 	id::Int64              # the index of the particle in sys.particles
 	spawn_y::Float64       # the altitude it was generated at
-	grad_θ::RealVector     # ∇θ
+	grad_δθ::RealVector     # ∇δθ
 	grad_u::RealVector     # ∇u (x-velocity gradient)
 	grad_w::RealVector     # ∇w (y-velocity gradient)
 	best_match_id::Int64   # rd of the fluid particle 'e'
@@ -94,17 +94,17 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # ρ
 			0.0,            # n
 			0.0,            # Omega
-			0.0,            # P_bg
 			0.0,            # P
-			0.0,            # θ_bg 
-			0.0,            # θ′ 
+			0.0,            # P_bg
 			0.0,            # θ 
+			0.0,            # θ_bg 
+			0.0,            # δθ
 			0.0,            # T_bg
 			0.0,            # T
 			type,           # type
 	                0,              # the index of the particle in sys.particles
 			0.0,            #spawn_y::Float64
-			VEC0,           #grad_θ::RealVector
+			VEC0,           #grad_δθ::RealVector
 			VEC0,           #grad_u::RealVector
 			VEC0,           #grad_w::RealVector
 			0,              #best_match_id::Int64
@@ -123,8 +123,8 @@ mutable struct Particle <: AbstractParticle
 		obj.P = 0.0 # needs SPH sum!
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
-		obj.θ = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
+		obj.δθ = 0.0
+		obj.θ = obj.θ_bg + obj.δθ
 
 		obj.spawn_y = obj.x[2]
 		return obj
@@ -178,7 +178,7 @@ end
 
 @inbounds function compute_pot_temperature!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, R_gas::Float64)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 @inbounds function find_temperature!(p::Particle, R_mass::Float64)
@@ -368,6 +368,9 @@ function verlet_step!(sys, global_params, sim_params)
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
+
+	# the potential temperature has to be computed before EBC procedure!
+	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
 	
 	# extrapolate θ, v to the ghost particles at the boundaries
 	apply!(sys, p -> reset_ebc_gradients!(p))
@@ -376,17 +379,17 @@ function verlet_step!(sys, global_params, sim_params)
 	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
 	apply!(sys, p -> reset_mountain_ebc_search!(p))
 	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-	apply_extrapolation!(sys)
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, R_gas)
 	apply_mountain_freeslip!(sys, h_m, a)
 
 	# compute pressure
 	apply!(sys, p -> reset_pressure!(p, θ_0))
-	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
 	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
 	apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
 
 	# compute temperature 
 	apply!(sys, p -> find_temperature!(p, R_mass))
+
 	# compute the forces
 	apply!(sys, p -> reset_acceleration!(p))
 	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
