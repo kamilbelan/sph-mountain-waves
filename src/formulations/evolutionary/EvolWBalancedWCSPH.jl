@@ -57,23 +57,23 @@ mutable struct Particle <: AbstractParticle
 	m::Float64        # mass
 	v::RealVector     # velocity
 	Dv::RealVector    # acceleration
-	ρ_bg::Float64     # background density
-	ρ′::Float64       # density perturbation
 	ρ::Float64        # total density
+	ρ_bg::Float64     # background density
+	δρ::Float64       # density perturbation
 	Dρ::Float64       # density rate
-	P_bg::Float64     # background pressure
-	P′::Float64       # pressure perturbation
 	P::Float64        # total pressure
+	P_bg::Float64     # background pressure
+	δP::Float64       # pressure perturbation
 	c::Float64        # local speed of sound
-	θ_bg::Float64     # bakcground potential temperature
-	θ′::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
+	θ_bg::Float64     # bakcground potential temperature
+	δθ::Float64       # potential temperature perturbation
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
 	type::Float64     # particle type
 	id::Int64              # the index of the particle in sys.particles
 	spawn_y::Float64       # the altitude it was generated at
-	grad_ρ::RealVector     # ∇ρ
+	grad_δρ::RealVector     # ∇δρ
 	grad_u::RealVector     # ∇u (x-velocity gradient)
 	grad_w::RealVector     # ∇w (y-velocity gradient)
 	best_match_id::Int64   # rd of the fluid particle 'e'
@@ -96,17 +96,17 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # m
 			v,              # v
 			VEC0,           # Dv
-			0.0,            # ρ_bg
-			0.0,            # ρ′
 			0.0,            # ρ
+			0.0,            # ρ_bg
+			0.0,            # δρ
 			0.0,            # Dρ
-			0.0,            # P_bg
-			0.0,            # P′
 			0.0,            # P
+			0.0,            # P_bg
+			0.0,            # δP
 			0.0,            # c
-			0.0,            # θ_bg 
-			0.0,            # θ′ 
 			0.0,            # θ 
+			0.0,            # θ_bg 
+			0.0,            # δθ
 			0.0,            # T_bg
 			0.0,            # T
 			type,            # type
@@ -122,21 +122,21 @@ mutable struct Particle <: AbstractParticle
 		# initialization
 		
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
-		obj.ρ′ = 0.0
-		obj.ρ = obj.ρ′ + obj.ρ_bg
+		obj.δρ = 0.0
+		obj.ρ = obj.δρ + obj.ρ_bg
 		obj.m = ρ0 * dr^2
 
 		obj.T_bg = T_bg
 		obj.T = T_bg
 
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
-		obj.P′ = 0.0
-		obj.P = obj.P′ + obj.P_bg
+		obj.δP = 0.0
+		obj.P = obj.δP + obj.P_bg
 		obj.c = sqrt(γ * obj.P / obj.ρ)
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
-		obj.θ = obj.θ′ + obj.θ_bg
+		obj.δθ = 0.0
+		obj.θ = obj.δθ + obj.θ_bg
 
 		obj.spawn_y = obj.x[2]
 
@@ -174,8 +174,8 @@ end
 
 @inbounds function compute_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, P_floor)
 	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
-	p.P′ = p.c^2 * p.ρ′
-	pP = p.P_bg + p.P′
+	p.δP = p.c^2 * p.δρ
+	pP = p.P_bg + p.δP
 	p.P = max(pP, P_floor)
 end
 
@@ -191,7 +191,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
 	p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 
@@ -232,7 +232,7 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 end
 
 function buyoancy_force(p::Particle, g::Float64)
-	return -g * VECY * p.ρ′ / p.ρ 
+	return -g * VECY * p.δρ / p.ρ 
 
 end
 
@@ -251,7 +251,7 @@ end
 	qrho = max(q.ρ, rho_floor)
 
 	# pairwise conservative force
-	p.Dv += -q.m * (p.P′ / prho^2 + q.P′ / qrho^2) * ker * x_pq
+	p.Dv += -q.m * (p.δP / prho^2 + q.δP / qrho^2) * ker * x_pq
 
 	# artificial viscous force
 	if dot_product < 0.0
@@ -273,14 +273,18 @@ end
 # ==============
 
 @inbounds function balance_of_mass!(p::Particle, q::Particle, r::Float64)
-	ker = (q.m / q.ρ) * rDwendland2(p.h, r)
-	p.Dρ += p.ρ * ker * SmoothedParticles.dot(p.x - q.x, p.v - q.v)
+	if p.type == FLUID || p.type == INFLOW_INCOMING
+		ker = (q.m / q.ρ) * rDwendland2(p.h, r)
+		p.Dρ += p.ρ * ker * SmoothedParticles.dot(p.x - q.x, p.v - q.v)
+	end
 end
 
 @inbounds function compute_density!(p::Particle, dt::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
-	p.ρ += p.Dρ * dt
-	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-	p.ρ′ = p.ρ - p.ρ_bg
+	if p.type == FLUID || p.type == INFLOW_INCOMING
+		p.ρ += p.Dρ * dt
+		p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
+		p.δρ = p.ρ - p.ρ_bg
+	end
 end
 
 @inbounds function reset_density_rate!(p::Particle)
@@ -291,7 +295,7 @@ end
 	if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST) || (p.type == MOUNTAIN)
 		# Background density is strictly a function of the ghost's fixed y-coordinate
 		p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-		p.ρ′ = p.ρ - p.ρ_bg
+		p.δρ = p.ρ - p.ρ_bg
 	end
 end
 
@@ -353,7 +357,7 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
 	apply!(sys, p -> reset_mountain_ebc_search!(p))
 	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-	apply_extrapolation!(sys)
+	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass)
 	apply_mountain_freeslip!(sys, h_m, a)
 
 	# set correct density values to the ghost and mountain particles
