@@ -44,4 +44,9 @@ echo "  Sim config:    $sim_conf"
 echo ""
 
 cd "$SCRIPT_DIR"
-sbatch "$submit_script" "$global_conf" "$sim_conf"
+
+# Convert to relative paths for SLURM job
+global_conf_rel="experiments/$exp_name/global_params.toml"
+sim_conf_rel="experiments/$exp_name/sim_params.toml"
+
+sbatch "$submit_script" "$global_conf_rel" "$sim_conf_rel"
