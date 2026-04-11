@@ -56,18 +56,23 @@ do_reconnect() {
 
 do_sync() {
       local dir="${1:-}"
+      local dst="${2:-}"
       if [[ -z "$dir" ]]; then
-          echo "Usage: $0 sync <path-under-data/sims/>"
+          echo "Usage: $0 sync <path-under-data/sims/> [custom-destination]"
           exit 1
       fi
 
       local src="$REMOTE_HOST:$REMOTE_PATH/data/sims/$dir/"
-      local dst="$SCRIPT_DIR/data/sims/$dir/"
+      if [[ -z "$dst" ]]; then
+          dst="$SCRIPT_DIR/data/sims/$dir/"
+      else
+          dst="${dst/#\~/$HOME}"
+      fi
 
       mkdir -p "$dst"
-      echo "Syncing $dir ..."
+      echo "Syncing $dir -> $dst ..."
       rsync -avz --progress "$src" "$dst"
-      echo -e "${GREEN}Done -> data/sims/$dir${NC}"
+      echo -e "${GREEN}Done${NC}"
   }
 
 case "${1:-}" in
