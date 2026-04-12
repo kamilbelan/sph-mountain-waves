@@ -10,3 +10,8 @@
 
 # Notes
 - [x] include the definition of `bc_width` derived from `dr`
+
+# What is certain
+## t_end = 600.0
+- gamma_r_rel = 0.05 - 0.1 produces a stable simulation
+- gamma_r_rel > 1.5 leads to maximum velocity going nuts from about t = 400
