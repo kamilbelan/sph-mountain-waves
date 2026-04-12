@@ -249,7 +249,7 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	h_top = η * s_max * a_factor
 	
 	# initialize the system
-	sys = ParticleSystem(Particle, domain + fence, 2.0*h_top)
+	sys = ParticleSystem(Particle, domain + fence, h_top)
 
 	# initial velocity
 	initial_velocity = v_initial * VECX

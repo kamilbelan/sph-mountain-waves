@@ -205,11 +205,11 @@ end
 	end
 end
 
-@inbounds function compute_smoothing!(p::Particle, dt::Float64)
+@inbounds function compute_smoothing!(p::Particle, dt::Float64, h_top::Float64)
 	if p.type == FLUID || p.type == INFLOW_INCOMING
 		p.h += p.Dh * dt
+		p.h = min(p.h, h_top)
 	end
-
 end
 
 @inbounds function reset_smoothing_rate!(p::Particle)
@@ -344,6 +344,8 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
+        h_top = η * dr * exp(K * dom_height / 2.0) * (4 / 3)^(1 / 4)
+	
 
 	# half-step acceleration & drift
 	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
@@ -378,7 +380,7 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
 	apply!(sys, p -> balance_of_smoothing!(p))
 	apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
-	apply!(sys, p -> compute_smoothing!(p, dt))
+	apply!(sys, p -> compute_smoothing!(p, dt, h_top))
 	create_cell_list!(sys)
 
 	# compute pressure

@@ -212,12 +212,13 @@ end
 # Smoothing-length evolution (e.g. computing the SPH sum, setting the adaptive h, reseting the rate...)
 # ==============
 
-@inbounds function update_smoothing!(p::Particle, η::Float64)
+@inbounds function update_smoothing!(p::Particle, η::Float64, h_top::Float64)
 	if p.type == FLUID || p.type == INFLOW_INCOMING
 		omega = max(p.Omega, 0.01)
 		# Newton iteration to find the suitable h_new
 		h_new = p.h - (p.h - η / sqrt(p.n)) / omega 
 		p.h = clamp(h_new, 0.8 * p.h, 1.2 * p.h)
+		p.h = min(p.h, h_top)
 	end
 end
 
@@ -362,6 +363,7 @@ function verlet_step!(sys, global_params, sim_params)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
 	K = g / (R_mass * T_bg)
+        h_top = η * dr * exp(K * dom_height / 2.0) * (4 / 3)^(1 / 4)
 	
 	# half-step acceleration & drift
 	apply!(sys, p -> accelerate!(p, dt, z_t, z_β, γ_r))
@@ -383,7 +385,7 @@ function verlet_step!(sys, global_params, sim_params)
 		
 		# we in fact do not need the last values, since they will be taken into the balance of momentum
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h_top))
 			create_cell_list!(sys)
 		end
 	end
@@ -442,6 +444,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	K = g / (R_mass * T_bg)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
+        h_top = η * dr * exp(K * dom_height / 2.0) * (4 / 3)^(1 / 4)
 
 	# create the particle system
 	sys = make_system(Particle, global_params, sim_params)
@@ -461,7 +464,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 		apply!(sys, p -> finalize_number_density!(p))
 
 		if iter < max_iter
-			apply!(sys, p -> update_smoothing!(p, η))
+			apply!(sys, p -> update_smoothing!(p, η, h_top))
 			create_cell_list!(sys)
 		end
 	end
