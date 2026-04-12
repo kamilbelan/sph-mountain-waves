@@ -9,6 +9,9 @@
 *.vtk
 *.jld2
 
+# custom sysimages
+*.so
+
 # unwanted data
 *.csv
 
