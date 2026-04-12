@@ -102,7 +102,7 @@ end
 				end
 				q = sys.particles[j]
 				r = dist(p,q)
-				if (r > sys.h) || (p == q)
+				if (r > max(p.h, q.h)) || (p == q)
 					continue
 				end
 				action!(p,q,r)
@@ -191,7 +191,7 @@ For given function `func(p::T, q::T)::Float64` where `T <: AbstractParticle`, as
 ```
 
 where ``p_i``, ``p_j`` are respectively the i-th and j-th particle in `sys::ParticleSystem{T}` and ``r_{ij}`` is their mutual distance.
-This assumes that ``A_{ij} = 0`` for ``r_{ij} > h``.
+This assumes that ``A_{ij} = 0`` for ``r_{ij} > max(p.h, q.h)``.
 """
 @inline function assemble_matrix(sys::ParticleSystem, func::Function)::SparseMatrixCSC{Float64}
 	N = length(sys.particles)
@@ -211,7 +211,7 @@ This assumes that ``A_{ij} = 0`` for ``r_{ij} > h``.
 					q = sys.particles[l]
 					#filter remote particles
 					r = dist(p,q)
-					if (r > sys.h)
+					if (r > max(p.h, q.h))
 						continue
 					end
 					push!(I, id[p])
@@ -249,7 +249,7 @@ not occupied by a particle.
 				end
 				q = sys.particles[l]
 				r = norm(x - q.x)
-				if (r > sys.h)
+				if (r > max(p.h, q.h))
 					continue
 				end
 				out += func(q,r)
@@ -280,7 +280,7 @@ For given function `func(p::T, q::T, r::Float64)::Float64 where T <: AbstractPar
 				end
 				q = sys.particles[l]
 				r = norm(p.x - q.x)
-				if (r > sys.h)
+				if (r > max(p.h, q.h))
 					continue
 				end
 				out += func(p,q,r)
