@@ -63,6 +63,7 @@ function time_loop(global_params::Dict,
 				E = energy(sys, g)
 				@show E
 				push!(energies, (t, E))
+				flush(stdout) # force the output
 
 				# write the data at the given time to a h5 file
 				write_frame!(run_dir, sys, frame_counter, t)

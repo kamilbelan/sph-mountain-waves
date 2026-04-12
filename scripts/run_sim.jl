@@ -181,6 +181,7 @@ for model_name in model_list
 			println(rpad("  __ $k", 20), " = $v")
 		end
 		println("") # Empty line for spacing before logs
+		flush(stdout) # force the output
 
 		# run the model
 		output_path = ModelModule.run_sim(global_params, sim_params)
