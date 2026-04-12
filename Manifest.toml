@@ -1606,7 +1606,7 @@ version = "0.1.5"
 
 [[deps.SmoothedParticles]]
 deps = ["Interpolations", "Match", "ReadVTK", "SparseArrays", "StaticArrays", "WriteVTK"]
-git-tree-sha1 = "42d2334d3078fb9e061db33fcd5193c40869b354"
+path = "lib/SmoothedParticles/9tnSQ"
 uuid = "b7455f7a-83c6-4046-bd2b-dfe6091272a6"
 version = "0.2.0"
 
