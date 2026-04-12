@@ -66,6 +66,6 @@ JULIA_BIN=/usr/work/belank/software/julia-1.12.4/bin/julia
 mkdir -p logs
 
 # run the script, passing the config files as arguments
-$JULIA_BIN --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+$JULIA_BIN --sysimage=sph.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
 
 echo "=== JOB END $(date) ==="
