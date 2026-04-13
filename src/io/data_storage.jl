@@ -9,7 +9,7 @@ using SmoothedParticles
 # ==============
 
 """
-    initialize_run_directory(sim_params::Dict)::String
+initialize_run_directory(sim_params::Dict)::String
 
 Creates (and outputs) a separate directory based on the simulation parameters, together with the DrWatson metadata.
 """
@@ -23,7 +23,7 @@ function initialize_run_directory(sim_params::Dict)::String
 	model_name_str = string(sim_params[:model])
 
 	# generate a time prefix for uniqueness 
-        time_prefix = Dates.format(now(), "HHMMSS")
+	time_prefix = Dates.format(now(), "HHMMSS")
 
 	# use a convenient name
 	run_name = "$(time_prefix)_$(savename(name_params))"
@@ -57,7 +57,7 @@ end
 # ==============
 
 """
-    write_file(run_dir::String, sys::ParticleSystem, frame_counter::Int64, t::Float64)
+write_file(run_dir::String, sys::ParticleSystem, frame_counter::Int64, t::Float64)
 
 Creates a H5 frame file and writes the simulation's frame's data to it.
 """
@@ -117,7 +117,7 @@ end
 # ==============
 
 """ 
-    generate_sph_xdmf(run_dir::String)
+generate_sph_xdmf(run_dir::String)
 
 Finds all HDF5 frames in `run_dir and creates a XDMF file for Paraview visualisation.
 """
@@ -193,7 +193,7 @@ function generate_sph_xdmf(run_dir::String)
 	  </DataItem>
 	  </Attribute>
 
-          <Attribute Name="Potential temperature perturbation" AttributeType="Scalar" Center="Node">
+	  <Attribute Name="Potential temperature perturbation" AttributeType="Scalar" Center="Node">
 	  <DataItem Dimensions="$N" NumberType="Float" Precision="8" Format="HDF">
 	  $filename:/pot_temperatures_pert
 	  </DataItem>
@@ -223,7 +223,7 @@ function generate_sph_xdmf(run_dir::String)
 end
 
 """
-    validate_restart_dir(restart_dir::String)::String
+validate_restart_dir(restart_dir::String)::String
 
 Verify that a restart directory exists and contains a checkpoint.
 Returns the path unchanged, or errors out.
