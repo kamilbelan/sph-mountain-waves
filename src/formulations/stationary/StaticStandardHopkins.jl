@@ -71,8 +71,8 @@ mutable struct Particle <: AbstractParticle
 	function Particle(x::RealVector, v::RealVector, type::Float64, global_params::Dict, sim_params::Dict)
 		# unpack all parameters
 		@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
-		@unpack dom_height, dom_length, a, z_t, z_β = global_params
-		@unpack h_m = sim_params
+		@unpack dom_height, dom_length, a, z_t = global_params
+		@unpack h_m, z_β = sim_params
 		@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
 		@unpack η, dr, dt_rel, t_end = sim_params
 
@@ -306,8 +306,8 @@ end
 function verlet_step!(sys, global_params, sim_params)
 	# unpacking the parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
-	@unpack dom_height, dom_length, a, z_t, z_β = global_params
-	@unpack h_m = sim_params
+	@unpack dom_height, dom_length, a, z_t = global_params
+	@unpack h_m, z_β = sim_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
 	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 	
@@ -365,8 +365,8 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	
 	# unpack all parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
-	@unpack dom_height, dom_length, a, z_t, z_β = global_params
-	@unpack h_m = sim_params
+	@unpack dom_height, dom_length, a, z_t = global_params
+	@unpack h_m, z_β = sim_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
 	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 

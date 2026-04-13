@@ -16,7 +16,7 @@ Creates (and outputs) a separate directory based on the simulation parameters, t
 
 function initialize_run_directory(sim_params::Dict)::String
 	# choose the parameters for the folder name
-	name_keys = [:dr, :dt_rel, :t_end, :gamma_r_rel]
+	name_keys = [:dr, :t_end, :γ_r_rel, :z_β, :α]
 	name_params = filter(p -> p.first in name_keys, sim_params)
 
 	# extract model name safely 

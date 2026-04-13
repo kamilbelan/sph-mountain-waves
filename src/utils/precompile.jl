@@ -32,7 +32,6 @@ dummy_global = Dict{Symbol, Any}(
 	:dom_length => 10e3, # use a small domain
 	:a          => 5e3,
 	:z_t        => 5e3,
-	:z_β        => 2.5e3,
 )
 
 dummy_sim = Dict{Symbol, Any}(
@@ -47,6 +46,7 @@ dummy_sim = Dict{Symbol, Any}(
 	:β          => 0.3,
 	:γ_r_rel    => 0.0,
 	:h_m        => 100.0,
+	:z_β        => 2.5e3,
 	:v_initial  => 20.0,
 	:model      => "precompile",
 )
