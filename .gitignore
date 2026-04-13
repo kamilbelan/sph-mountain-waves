@@ -47,3 +47,6 @@ logs/*
 
 # ignore remote files
 remote/*
+
+# chimera jupyter stuff
+.ipynb_checkpoints/*
