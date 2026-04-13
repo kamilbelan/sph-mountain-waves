@@ -32,6 +32,7 @@ include(srcdir("core", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("io", "checkpoint.jl"))
 include(srcdir("core", "ebc_boundaries.jl"))
 
 # ==============

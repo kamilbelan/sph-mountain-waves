@@ -32,6 +32,7 @@ include(srcdir("core", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("io", "checkpoint.jl"))
 include(srcdir("core", "bc", "ebc_shared.jl"))
 
 # ==============
@@ -404,7 +405,7 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
         # ==============
         # Parameters initialization
         # ==============
@@ -427,63 +428,79 @@ function run_sim(global_params::Dict, sim_params::Dict)
         θ_0 = (P_0^((γ - 1) / γ)) / R_mass
         h_top = η * dr * exp(K * dom_height / 2.0) * (4 / 3)^(1 / 4)
 
-        # create the particle system
+        # create the particle system (needed for domain geometry even on restart)
         sys = make_system(Particle, global_params, sim_params)
 
         # ==============
-        # Initialization of the physical fields
+        # Restart or fresh initialization
         # ==============
 
-        # initialize the number density and the smoothing length
-        max_iter = 3
-        for iter in 1:max_iter
-                apply!(sys, p -> reset_number_density!(p))
-                apply!(sys, (p, q, r) -> compute_number_density!(p, q, r))
-                apply!(sys, p -> finalize_number_density!(p))
-
-                if iter < max_iter
-                        apply!(sys, p -> update_smoothing!(p, η, h_top))
-                        create_cell_list!(sys)
-                end
-        end
-
-        # initialize the density
-        apply!(sys, p -> reset_density!(p))
-        apply!(sys, (p, q, r) -> compute_density!(p, q, r))
-
-        # compute temperature and potential temperature 
-        # the potential temperature has to be computed before EBC procedure!
-        apply!(sys, p -> find_temperature!(p, R_mass))
-        apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
-
-        # extrapolate δθ, v to the ghost particles at the boundaries
-        apply!(sys, p -> reset_ebc_gradients!(p))
-        apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
-        apply!(sys, p -> reset_ghost_ebc_search!(p))
-        apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
-        apply!(sys, p -> reset_mountain_ebc_search!(p))
-        apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-        apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, R_gas)
-        apply_mountain_freeslip!(sys, h_m, a)
-
-        # initialization of the pressure
-        apply!(sys, p -> reset_pressure!(p, θ_0))
-        apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
-        apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
-
-        # compute acceleration (balance of momentum)
-        apply!(sys, p -> reset_acceleration!(p))
-        apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
-
-        # ==============
-        # Output handling
-        # ==============
-
-        # initialize simulation output directory with metadata
-        run_dir = initialize_run_directory(sim_params)
-
-        # initialize data accumulation for diagnostics
+        k_start = 0
+        frame_counter = 0
         average_velocities, maximum_velocities, energies = initialize_diagnostics_arrays()
+
+        if !isempty(restart_dir)
+                run_dir = validate_restart_dir(restart_dir)
+                ckpt = load_checkpoint(run_dir)
+                if ckpt === nothing
+                        error("Restart requested but no checkpoint found in: $run_dir")
+                end
+                restore_particles!(sys, ckpt.particles)
+                k_start = ckpt.k
+                frame_counter = ckpt.frame_counter
+                average_velocities = ckpt.average_velocities
+                maximum_velocities = ckpt.maximum_velocities
+                energies = ckpt.energies
+                println("Resumed from checkpoint: t=$(ckpt.t), step=$k_start")
+        else
+                # ==============
+                # Fresh initialization of the physical fields
+                # ==============
+
+                # initialize the number density and the smoothing length
+                max_iter = 3
+                for iter in 1:max_iter
+                        apply!(sys, p -> reset_number_density!(p))
+                        apply!(sys, (p, q, r) -> compute_number_density!(p, q, r))
+                        apply!(sys, p -> finalize_number_density!(p))
+
+                        if iter < max_iter
+                                apply!(sys, p -> update_smoothing!(p, η, h_top))
+                                create_cell_list!(sys)
+                        end
+                end
+
+                # initialize the density
+                apply!(sys, p -> reset_density!(p))
+                apply!(sys, (p, q, r) -> compute_density!(p, q, r))
+
+                # compute temperature and potential temperature
+                # the potential temperature has to be computed before EBC procedure!
+                apply!(sys, p -> find_temperature!(p, R_mass))
+                apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
+
+                # extrapolate δθ, v to the ghost particles at the boundaries
+                apply!(sys, p -> reset_ebc_gradients!(p))
+                apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
+                apply!(sys, p -> reset_ghost_ebc_search!(p))
+                apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
+                apply!(sys, p -> reset_mountain_ebc_search!(p))
+                apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
+                apply_extrapolation!(sys, ρ0, T_bg, g, R_mass, R_gas)
+                apply_mountain_freeslip!(sys, h_m, a)
+
+                # initialization of the pressure
+                apply!(sys, p -> reset_pressure!(p, θ_0))
+                apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
+                apply!(sys, p -> finalize_pressure!(p, γ, P_floor))
+
+                # compute acceleration (balance of momentum)
+                apply!(sys, p -> reset_acceleration!(p))
+                apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
+
+                # initialize simulation output directory with metadata
+                run_dir = initialize_run_directory(sim_params)
+        end
 
         # ==============
         # Time loop
@@ -493,7 +510,9 @@ function run_sim(global_params::Dict, sim_params::Dict)
         step_function!(sys) = verlet_step!(sys, global_params, sim_params)
 
         # iterate in time
-        time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys, average_velocities, maximum_velocities, energies)
+        time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys,
+                  average_velocities, maximum_velocities, energies;
+                  k_start=k_start, frame_counter=frame_counter)
 
         # create a xdmf file to use with the generated h5 files
         generate_sph_xdmf(run_dir)
