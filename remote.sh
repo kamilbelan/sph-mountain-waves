@@ -80,7 +80,7 @@ case "${1:-}" in
 	umount)    do_umount ;;
 	status)    do_status ;;
 	reconnect) do_reconnect ;;
-	sync)      do_sync "${2:-}" ;;
+	sync)      do_sync "${2:-}" "${3:-}" ;;
 	*)
 		echo "Usage: $0 {mount|umount|status|reconnect|sync}"
 		exit 1
