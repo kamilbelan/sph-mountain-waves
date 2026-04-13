@@ -17,18 +17,20 @@ using TOML
 # ============================================================
 
 if isempty(ARGS)
-	# REPL mode 
+	# REPL mode
 	println("Using default project configs.")
 	global_file = projectdir("config", "global_params.toml")
 	sweep_file  = projectdir("config", "sim_params.toml")
+	restart_dir = ""
 else
 	# command line mode
 	if length(ARGS) < 2
-		println("Usage: julia scripts/run_sim.jl global_params.toml sim_params.toml")
+		println("Usage: julia scripts/run_sim.jl global_params.toml sim_params.toml [restart_dir]")
 		exit(1)
 	end
 	global_file = ARGS[1]
 	sweep_file  = ARGS[2]
+	restart_dir = length(ARGS) >= 3 ? ARGS[3] : ""
 end
 
 println("\n" * "="^60)
@@ -36,6 +38,9 @@ println("=== CONFIGURATION LOADED")
 println("="^60)
 println("Global Config:      $global_file")
 println("Simulation Config:  $sweep_file")
+if !isempty(restart_dir)
+	println("Restart from:       $restart_dir")
+end
 println("-"^60)
 
 # ============================================================
@@ -183,9 +188,18 @@ for model_name in model_list
 		println("") # Empty line for spacing before logs
 		flush(stdout) # force the output
 
-		# run the model
-		output_path = ModelModule.run_sim(global_params, sim_params)
+		# run the model (pass restart_dir if resuming from checkpoint)
+		output_path = ModelModule.run_sim(global_params, sim_params; restart_dir=restart_dir)
 		println("\n>>> Saved: $output_path")
+
+		# for job chaining: write the run_dir to CHAIN_FILE so subsequent jobs know where to restart
+		chain_file = get(ENV, "CHAIN_FILE", "")
+		if !isempty(chain_file)
+			open(chain_file, "w") do io
+				write(io, output_path)
+			end
+			println("Chain file updated: $chain_file -> $output_path")
+		end
 	end
 end
 
