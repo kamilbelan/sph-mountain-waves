@@ -68,6 +68,12 @@ JULIA_BIN=/home/belank/.juliaup/bin/julia
 mkdir -p logs
 
 # run the script, passing the config files as arguments
-$JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+# if RESTART_DIR is set (by job chaining), pass it as a third argument
+if [ -n "${RESTART_DIR:-}" ]; then
+    echo "   Restart Dir:   $RESTART_DIR"
+    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF" "$RESTART_DIR"
+else
+    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+fi
 
 echo "=== JOB END $(date) ==="

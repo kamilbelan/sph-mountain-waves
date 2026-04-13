@@ -45,6 +45,17 @@ echo "   Sweep Config:  $SIM_CONF"
 echo "   Git commit:    $(git rev-parse --short HEAD)"
 
 # ==============================================================================
+# CHAIN RESTART SUPPORT
+# ==============================================================================
+# When running as part of a chain (submit_chimera_chain.sh), CHAIN_FILE points
+# to a shared temp file containing the restart directory.
+# Job 1 writes the run_dir there; jobs 2+ read it as RESTART_DIR.
+
+if [ -n "${CHAIN_FILE:-}" ] && [ -f "$CHAIN_FILE" ]; then
+    RESTART_DIR=$(cat "$CHAIN_FILE")
+fi
+
+# ==============================================================================
 # ENVIRONMENT SETUP
 # ==============================================================================
 
@@ -67,6 +78,12 @@ JULIA_BIN=/home/belank/.juliaup/bin/julia
 mkdir -p logs
 
 # run the script, passing the config files as arguments
-$JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+# if RESTART_DIR is set (by job chaining), pass it as a third argument
+if [ -n "${RESTART_DIR:-}" ]; then
+    echo "   Restart Dir:   $RESTART_DIR"
+    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF" "$RESTART_DIR"
+else
+    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+fi
 
 echo "=== JOB END $(date) ==="
