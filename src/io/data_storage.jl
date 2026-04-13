@@ -222,3 +222,20 @@ function generate_sph_xdmf(run_dir::String)
 	println("successfully generated $(xdmf_path)")
 end
 
+"""
+    validate_restart_dir(restart_dir::String)::String
+
+Verify that a restart directory exists and contains a checkpoint.
+Returns the path unchanged, or errors out.
+"""
+function validate_restart_dir(restart_dir::String)::String
+	if !isdir(restart_dir)
+		error("Restart directory does not exist: $restart_dir")
+	end
+	if !isfile(joinpath(restart_dir, "checkpoint.jld2"))
+		error("No checkpoint.jld2 found in: $restart_dir")
+	end
+	println("Restarting from: $restart_dir")
+	return restart_dir
+end
+
