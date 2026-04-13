@@ -1,12 +1,12 @@
 #!/bin/bash -l
-#SBATCH --job-name=SPH
-#SBATCH --output=logs/SPH-%j.out
-#SBATCH --error=logs/SPH-%j.err
+#SBATCH --job-name=SPH_long
+#SBATCH --output=logs/SPH_long_-%j.out
+#SBATCH --error=logs/SPH_long-%j.err
 
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --time=12:00:00
-#SBATCH --partition=express3
+#SBATCH --cpus-per-task=36
+#SBATCH --time=72:00:00
+#SBATCH --partition=long3
 
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=slurm@kamilbelan.anonaddy.com
