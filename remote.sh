@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-REMOTE_HOST="snehurka"
-REMOTE_PATH="/usr/users/belank/work/projects/sph-mountain-waves"
+REMOTE_HOST="chimera"
+REMOTE_PATH="/home/belank/work/projects/sph-mountain-waves"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MOUNT_POINT="$SCRIPT_DIR/remote"
 
