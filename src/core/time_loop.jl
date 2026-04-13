@@ -3,48 +3,53 @@ using DataFrames
 using Parameters
 
 """
-    time_loop(global_params::Dict, 
-		   run_dir::String,
-		   step_function!::Function,
-		   t_end::Float64, 
-		   dt::Float64,
-		   dt_frame::Float64,
-		   sys::ParticleSystem,
-		   average_velocities::DataFrame,
-		   maximum_velocities::DataFrame,
-		   energies::DataFrame,
-		   )
+    time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys,
+              average_velocities, maximum_velocities, energies;
+              k_start=0, frame_counter=0)
 
-Advances the simulation by one time-step.
+Advances the simulation from step `k_start` to `nsteps`.
+When resuming from a checkpoint, pass `k_start` and `frame_counter`
+so the loop continues where it left off.
 """
-function time_loop(global_params::Dict, 
+function time_loop(global_params::Dict,
 		   run_dir::String,
 		   step_function!::Function,
-		   t_end::Float64, 
+		   t_end::Float64,
 		   dt::Float64,
 		   dt_frame::Float64,
 		   sys::ParticleSystem,
 		   average_velocities::DataFrame,
 		   maximum_velocities::DataFrame,
-		   energies::DataFrame,
+		   energies::DataFrame;
+		   k_start::Int=0,
+		   frame_counter::Int=0,
 		   )
 
 	@unpack g = global_params
 	nsteps = Int(round(t_end / dt))
-	frame_counter = 0
 
 	println("\n" * "="^60)
 
-	# save the initial frame
-	t = 0.0
-	write_frame!(run_dir, sys, frame_counter, t)
-	frame_counter += 1
-
 	save_interval = max(1, Int(round(dt_frame / dt)))
 
-	# introduce a try-catch block to obtain the xdmf fail even when the sim crashes
+	# if simulation is already complete (e.g. chained job with nothing left to do), exit early
+	if k_start >= nsteps
+		println("Simulation already complete (step $k_start / $nsteps). Nothing to do.")
+		return
+	end
+
+	# only save the initial frame on a fresh run
+	if k_start == 0
+		t = 0.0
+		write_frame!(run_dir, sys, frame_counter, t)
+		frame_counter += 1
+	else
+		println("Resuming from step $k_start / $nsteps (t=$(k_start * dt))")
+	end
+
+	# introduce a try-catch block to obtain the xdmf file even when the sim crashes
 	try
-		for k = 1:nsteps
+		for k = (k_start + 1):nsteps
 			t = k * dt
 			step_function!(sys)
 
@@ -68,6 +73,10 @@ function time_loop(global_params::Dict,
 				# write the data at the given time to a h5 file
 				write_frame!(run_dir, sys, frame_counter, t)
 				frame_counter += 1
+
+				# save checkpoint (overwrites previous)
+				save_checkpoint(run_dir, sys, k, t, frame_counter,
+						average_velocities, maximum_velocities, energies)
 			end # if
 		end # for
 	catch e
