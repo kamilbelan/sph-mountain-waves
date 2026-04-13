@@ -2,14 +2,15 @@
 #SBATCH --job-name=SPH_med
 #SBATCH --output=logs/SPH_med_-%j.out
 #SBATCH --error=logs/SPH_med-%j.err
-
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=36
-#SBATCH --time=12:00:00
-#SBATCH --partition=express3
-
+#SBATCH --partition=ffa
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=slurm@kamilbelan.anonaddy.com
+
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=64
+#SBATCH --threads-per-core=1
+#SBATCH --mem=32G
+#SBATCH --time=12:00:00
 
 set -euo pipefail
 
@@ -57,7 +58,7 @@ cd $SLURM_SUBMIT_DIR
 echo "   Working Directory: $(pwd)"
 
 # define julia binary path
-JULIA_BIN=/usr/work/belank/software/julia-1.12.4/bin/julia
+JULIA_BIN=/home/belank/.juliaup/bin/julia
 
 # ==============================================================================
 # EXECUTION
@@ -66,6 +67,6 @@ JULIA_BIN=/usr/work/belank/software/julia-1.12.4/bin/julia
 mkdir -p logs
 
 # run the script, passing the config files as arguments
-$JULIA_BIN --sysimage=sph_snehurka.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+$JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
 
 echo "=== JOB END $(date) ==="
