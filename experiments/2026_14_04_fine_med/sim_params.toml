@@ -10,7 +10,7 @@ eta = [1.8]
 epsilon = [0.01]
 alpha = [0.15]             # usually α = 0.05 - 0.2
 beta = [0.3]              # usually β = 2 α
-gamma_r_rel = [0.1]        # this will be multiplied by N = sqrt(0.0196)
+gamma_r_rel = [0.0]        # this will be multiplied by N = sqrt(0.0196)
 
 # mountain geometry
 h_m = [100.0]
