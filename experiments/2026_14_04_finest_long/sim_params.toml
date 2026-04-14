@@ -1,6 +1,6 @@
 # spatial and temporal resolution
 dr = [260.0]            # 26e3/25 = 1040.0, 26e3/50 = 520.0, 26e4/75 = 346.0 , 26e3/100 = 260.0
-dt_rel = [0.03]           #this will be multiplied by h0/c
+dt_rel = [0.05]           #this will be multiplied by h0/c
 t_end  = [3600.0]         
 
 # numerics
