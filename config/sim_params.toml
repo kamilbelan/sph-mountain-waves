@@ -8,8 +8,8 @@ rho_floor = [1e-6]
 P_floor = [1e-10]
 eta = [1.8]
 epsilon = [0.01]
-alpha = [0.2]             # usually α = 0.05 - 0.2
-beta = [0.4]              # usually β = 2 α
+alpha = [0.15]             # usually α = 0.05 - 0.2
+beta = [0.3]              # usually β = 2 α
 gamma_r_rel = [0.2]        # this will be multiplied by N = sqrt(0.0196)
 
 # mountain geometry
@@ -23,17 +23,17 @@ v_initial = [20.0]
 
 # choice of the formulation
 # options include:
-#    StaticStandardWCSPH
-#    StaticStandardHopkins
-#    StaticWBalancedWCSPH
-#    StaticWBalancedHopkins
-#    StaticWBalancedPThetaHopkins
-#    EvolWBalancedWCSPH 
-#    EvolWBalancedHopkins
-#    EvolWBalancedThetaHopkins
+#    StaticStandardSPH
+#    StaticStandardPA
+#    StaticWBSPH
+#    StaticWBPA
+#    StaticWBPTH
+#    EvolWBSPH 
+#    EvolWBPA
+#    EvolWBPTH
 
-#formulation = ["EvolWBalancedThetaHopkins"]
-formulation = ["EvolWBalancedThetaHopkins", "EvolWBalancedHopkins", "EvolWBalancedWCSPH"]
+#formulation = ["EvolWBPTH"]
+formulation = ["EvolWBPTH", "EvolWBPA", "EvolWBSPH"]
 
 
 

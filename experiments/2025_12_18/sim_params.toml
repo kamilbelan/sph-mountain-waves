@@ -20,4 +20,4 @@ z_beta = [12e3]
 v_initial = [20.0]
 
 # choice of the formulation
-formulation = ["EvolWBalancedHopkins"]
+formulation = ["EvolWBPA"]

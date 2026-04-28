@@ -23,17 +23,17 @@ v_initial = [20.0]
 
 # choice of the formulation
 # options include:
-#    StaticStandardWCSPH
-#    StaticStandardHopkins
-#    StaticWBalancedWCSPH
-#    StaticWBalancedHopkins
-#    StaticWBalancedPThetaHopkins
-#    EvolWBalancedWCSPH 
-#    EvolWBalancedHopkins
-#    EvolWBalancedThetaHopkins
+#    StaticStandardSPH
+#    StaticStandardPA
+#    StaticWBSPH
+#    StaticWBPA
+#    StaticWBPTH
+#    EvolWBSPH 
+#    EvolWBPA
+#    EvolWBPTH
 
-#formulation = ["EvolWBalancedThetaHopkins"]
-formulation = ["EvolWBalancedThetaHopkins", "EvolWBalancedHopkins", "EvolWBalancedWCSPH"]
+#formulation = ["EvolWBPTH"]
+formulation = ["EvolWBPTH", "EvolWBPA", "EvolWBSPH"]
 
 
 

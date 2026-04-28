@@ -6,7 +6,7 @@
  all thermodynamic processes are adiabatic
 """
 
-module StaticStandardWCSPH
+module StaticWBSPH
 
 export run_sim
 
@@ -210,7 +210,7 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 end
 
 function buyoancy_force(p::Particle, g::Float64)
-	return -g * VECY 
+	return -g * VECY * p.ρ′ / p.ρ 
 
 end
 
@@ -229,7 +229,7 @@ end
 	qrho = max(q.ρ, rho_floor)
 
 	# pairwise conservative force
-	p.Dv += -q.m * (p.P / prho^2 + q.P / qrho^2) * ker * x_pq
+	p.Dv += -q.m * (p.P′ / prho^2 + q.P′ / qrho^2) * ker * x_pq
 
 	# artificial viscous force
 	if dot_product < 0.0

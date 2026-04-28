@@ -1,10 +1,12 @@
 """
- An isentropic flow around a mountain with the Witch of Agnesi profile:
+ Static atmosphere above a mountain with the Witch of Agnesi profile:
 
- h(x) = (hₘ a²) / (x² + a²),
+ h(x) = (h_m a²) / (x² + a²),
+
+ all thermodynamic processes are adiabatic
 """
 
-module EvolWBalancedWCSPH
+module StaticStandardSPH
 
 export run_sim
 
@@ -23,23 +25,19 @@ using CSV
 using Parameters 
 using LinearAlgebra
 
+const FLUID = 0.0
+const WALL = 1.0
+const MOUNTAIN = 2.0
+
 
 # ==============
 # INCLUDE CORE SCRIPTS
 # ==============
 
-include(srcdir("core", "evolutionary_domain.jl"))
+include(srcdir("core", "stationary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
-include(srcdir("io", "checkpoint.jl"))
-include(srcdir("core", "bc", "ebc_shared.jl"))
-
-# ==============
-# INCLUDE FORMULATION-SPECIFIC SCRIPTS
-# ==============
-
-include(srcdir("core", "bc", "ebc_wcsph.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -58,27 +56,20 @@ mutable struct Particle <: AbstractParticle
 	m::Float64        # mass
 	v::RealVector     # velocity
 	Dv::RealVector    # acceleration
-	ρ::Float64        # total density
 	ρ_bg::Float64     # background density
-	δρ::Float64       # density perturbation
+	ρ′::Float64       # density perturbation
+	ρ::Float64        # total density
 	Dρ::Float64       # density rate
-	P::Float64        # total pressure
 	P_bg::Float64     # background pressure
-	δP::Float64       # pressure perturbation
+	P′::Float64       # pressure perturbation
+	P::Float64        # total pressure
 	c::Float64        # local speed of sound
-	θ::Float64        # total potential temperature
 	θ_bg::Float64     # bakcground potential temperature
-	δθ::Float64       # potential temperature perturbation
+	θ′::Float64       # potential temperature perturbation
+	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
 	type::Float64     # particle type
-	id::Int64              # the index of the particle in sys.particles
-	spawn_y::Float64       # the altitude it was generated at
-	grad_δρ::RealVector     # ∇δρ
-	grad_u::RealVector     # ∇u (x-velocity gradient)
-	grad_w::RealVector     # ∇w (y-velocity gradient)
-	best_match_id::Int64   # rd of the fluid particle 'e'
-	min_dist_sq::Float64   # argmin distance tracker
 
 	function Particle(x::RealVector, v::RealVector, type::Float64, global_params::Dict, sim_params::Dict)
 		# unpack all parameters
@@ -97,49 +88,40 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # m
 			v,              # v
 			VEC0,           # Dv
-			0.0,            # ρ
 			0.0,            # ρ_bg
-			0.0,            # δρ
+			0.0,            # ρ′
+			0.0,            # ρ
 			0.0,            # Dρ
-			0.0,            # P
 			0.0,            # P_bg
-			0.0,            # δP
+			0.0,            # P′
+			0.0,            # P
 			0.0,            # c
-			0.0,            # θ 
 			0.0,            # θ_bg 
-			0.0,            # δθ
+			0.0,            # θ′ 
+			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
-			type,            # type
-	                0,              # the index of the particle in sys.particles
-			0.0,            #spawn_y::Float64
-			VEC0,           #grad_ρ::RealVector
-			VEC0,           #grad_u::RealVector
-			VEC0,           #grad_w::RealVector
-			0,              #best_match_id::Int64
-			0.0,            #min_dist_sq::Float64
+			type,           # type
 		)
 
 		# initialization
 		
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
-		obj.δρ = 0.0
-		obj.ρ = obj.δρ + obj.ρ_bg
+		obj.ρ′ = 0.0
+		obj.ρ = obj.ρ′ + obj.ρ_bg
 		obj.m = ρ0 * dr^2
 
 		obj.T_bg = T_bg
 		obj.T = T_bg
 
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
-		obj.δP = 0.0
-		obj.P = obj.δP + obj.P_bg
+		obj.P′ = 0.0
+		obj.P = obj.P′ + obj.P_bg
 		obj.c = sqrt(γ * obj.P / obj.ρ)
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.δθ = 0.0
-		obj.θ = obj.δθ + obj.θ_bg
-
-		obj.spawn_y = obj.x[2]
+		obj.θ′ = 0.0
+		obj.θ = obj.θ′ + obj.θ_bg
 
 		return obj
 	end
@@ -163,11 +145,6 @@ function background_pot_temperature(y::Float64, ρ0::Float64, T_bg::Float64, g::
 	return T_bg * (((T_bg * R_gas * ρ0) / P_bg))^(2 / 7)
 end
 
-function set_bulk_velocity!(p::Particle, v_initial::Float64)
-	if p.type == FLUID
-		p.v = v_initial * VECX
-	end
-end
 
 # ==============
 # Pressure computation (e.g followed by sound speed computation)
@@ -175,8 +152,8 @@ end
 
 @inbounds function compute_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, P_floor)
 	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
-	p.δP = p.c^2 * p.δρ
-	pP = p.P_bg + p.δP
+	p.P′ = p.c^2 * p.ρ′
+	pP = p.P_bg + p.P′
 	p.P = max(pP, P_floor)
 end
 
@@ -192,7 +169,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
 	p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.δθ = p.θ - p.θ_bg
+	p.θ′ = p.θ - p.θ_bg
 end
 
 
@@ -201,16 +178,12 @@ end
 # ==============
 
 @inbounds function balance_of_smoothing!(p::Particle)
-	if p.type == FLUID || p.type == INFLOW_INCOMING
-		p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
-	end
+	p.Dh = -0.5 * (p.h / p.ρ) * p.Dρ
 end
 
-@inbounds function compute_smoothing!(p::Particle, dt::Float64, h_top::Float64)
-	if p.type == FLUID || p.type == INFLOW_INCOMING
-		p.h += p.Dh * dt
-		p.h = min(p.h, h_top)
-	end
+@inbounds function compute_smoothing!(p::Particle, dt::Float64)
+	p.h += p.Dh * dt
+
 end
 
 @inbounds function reset_smoothing_rate!(p::Particle)
@@ -237,7 +210,7 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 end
 
 function buyoancy_force(p::Particle, g::Float64)
-	return -g * VECY * p.δρ / p.ρ 
+	return -g * VECY 
 
 end
 
@@ -245,32 +218,30 @@ end
 # Momentum balance
 # ==============
 @inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ϵ::Float64, rho_floor::Float64, γ::Float64)
-	if p.type == FLUID
-		x_pq = p.x - q.x
-		v_pq = p.v - q.v
-		dot_product = SmoothedParticles.dot(x_pq, v_pq)
+	x_pq = p.x - q.x
+	v_pq = p.v - q.v
+	dot_product = SmoothedParticles.dot(x_pq, v_pq)
 
-		h_ij = 0.5 * (p.h + q.h)
-		ker = rDwendland2(h_ij, r)
+	h_ij = 0.5 * (p.h + q.h)
+	ker = rDwendland2(h_ij, r)
 
-		prho = max(p.ρ, rho_floor)
-		qrho = max(q.ρ, rho_floor)
+	prho = max(p.ρ, rho_floor)
+	qrho = max(q.ρ, rho_floor)
 
-		# pairwise conservative force
-		p.Dv += -q.m * (p.δP / prho^2 + q.δP / qrho^2) * ker * x_pq
+	# pairwise conservative force
+	p.Dv += -q.m * (p.P / prho^2 + q.P / qrho^2) * ker * x_pq
+
+	# artificial viscous force
+	if dot_product < 0.0
+		c_i = sqrt(γ * p.P / prho)
+		c_j = sqrt(γ * q.P / qrho)
+		c_ij = 0.5 * (c_i + c_j)
+		ρ_ij = 0.5 * (prho + qrho)
+		μ_ij = (h_ij * dot_product) / (r * r + ϵ * h_ij * h_ij)
+		π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
 
 		# artificial viscous force
-		if dot_product < 0.0
-			c_i = sqrt(γ * p.P / prho)
-			c_j = sqrt(γ * q.P / qrho)
-			c_ij = 0.5 * (c_i + c_j)
-			ρ_ij = 0.5 * (prho + qrho)
-			μ_ij = (h_ij * dot_product) / (r * r + ϵ * h_ij * h_ij)
-			π_ij = (-α * c_ij * μ_ij + β * μ_ij * μ_ij) / ρ_ij
-
-			# artificial viscous force
-			p.Dv += -q.m * π_ij * ker * x_pq
-		end
+		p.Dv += -q.m * π_ij * ker * x_pq
 	end
 
 end
@@ -280,30 +251,18 @@ end
 # ==============
 
 @inbounds function balance_of_mass!(p::Particle, q::Particle, r::Float64)
-	if p.type == FLUID || p.type == INFLOW_INCOMING
-		ker = (q.m / q.ρ) * rDwendland2(p.h, r)
-		p.Dρ += p.ρ * ker * SmoothedParticles.dot(p.x - q.x, p.v - q.v)
-	end
+	ker = (q.m / q.ρ) * rDwendland2(p.h, r)
+	p.Dρ += p.ρ * ker * SmoothedParticles.dot(p.x - q.x, p.v - q.v)
 end
 
 @inbounds function compute_density!(p::Particle, dt::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
-	if p.type == FLUID || p.type == INFLOW_INCOMING
-		p.ρ += p.Dρ * dt
-		p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-		p.δρ = p.ρ - p.ρ_bg
-	end
+	p.ρ += p.Dρ * dt
+	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
+	p.ρ′ = p.ρ - p.ρ_bg
 end
 
 @inbounds function reset_density_rate!(p::Particle)
 	p.Dρ = 0.0
-end
-
-@inbounds function update_density_perturbation!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
-	if (p.type == INFLOW_GHOST) || (p.type == OUTFLOW_GHOST) || (p.type == MOUNTAIN)
-		# Background density is strictly a function of the ghost's fixed y-coordinate
-		p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-		p.δρ = p.ρ - p.ρ_bg
-	end
 end
 
 
@@ -312,7 +271,7 @@ end
 # ==============
 
 function move!(p::Particle, dt::Float64)
-	if p.type == FLUID || p.type == INFLOW_INCOMING
+	if p.type == FLUID
 		p.x += dt * p.v
 	end
 end
@@ -327,7 +286,6 @@ function reset_acceleration!(p::Particle)
 	p.Dv = VEC0
 end
 
-
 # ==============
 # Verlet step
 # ==============
@@ -337,40 +295,18 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	@unpack dom_height, dom_length, a, z_t = global_params
 	@unpack h_m, z_β = sim_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
 	# compute derived parameters
 	h0 = η * dr
-	K = g / (R_mass * T_bg)
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
-        h_top = η * dr * exp(K * dom_height / 2.0) * (4 / 3)^(1 / 4)
-	
 
 	# half-step acceleration & drift
 	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
 	apply!(sys, p -> move!(p, dt))
-
-	# lifecycle management: teleport particles at the outflow to the inflow and set correct values for them
-	manage_particle_lifecycle!(sys, dr, K, dom_length)
-	apply!(sys, p -> set_inflow_values!(p, v_initial, ρ0, T_bg, g, R_mass))
-
-	# create the cell list after particles move and teleport
 	create_cell_list!(sys)
-	
-	# extrapolate δρ, v to the ghost and mountain particles at the boundaries
-	apply!(sys, p -> reset_ebc_gradients!(p))
-	apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
-	apply!(sys, p -> reset_ghost_ebc_search!(p))
-	apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
-	apply!(sys, p -> reset_mountain_ebc_search!(p))
-	apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-	apply_extrapolation!(sys, ρ0, T_bg, g, R_mass)
-	apply_mountain_freeslip!(sys, h_m, a)
-
-	# set correct density values to the ghost and mountain particles
-	apply!(sys, p -> update_density_perturbation!(p, ρ0, T_bg, g, R_mass))
 
 	# reset rates 
 	apply!(sys, p -> reset_acceleration!(p))
@@ -381,7 +317,7 @@ function verlet_step!(sys::ParticleSystem, global_params::Dict, sim_params::Dict
 	apply!(sys, (p, q, r) -> balance_of_mass!(p, q, r))
 	apply!(sys, p -> balance_of_smoothing!(p))
 	apply!(sys, p -> compute_density!(p, dt, ρ0, T_bg, g, R_mass))
-	apply!(sys, p -> compute_smoothing!(p, dt, h_top))
+	apply!(sys, p -> compute_smoothing!(p, dt))
 	create_cell_list!(sys)
 
 	# compute pressure
@@ -401,91 +337,63 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
+function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Parameters initialization
 	# ==============
-
+	
 	# unpack all parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, a, z_t = global_params
 	@unpack h_m, z_β = sim_params
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
-	@unpack η, dr, dt_rel, t_end, γ_r_rel, v_initial = sim_params
+	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
 	# compute derived parameters
 	h0 = η * dr
+	bc_width = 6*dr
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
-	K = g / (R_mass * T_bg)
 	γ_r = γ_r_rel * N
 
-	# create the particle system (needed for domain geometry even on restart)
+	# create the particle system
 	sys = make_system(Particle, global_params, sim_params)
 
 	# ==============
-	# Restart or fresh initialization
+	# Initialization of the physical fields
 	# ==============
+	
+	# initialization of the pressure
+	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
 
-	k_start = 0
-	frame_counter = 0
+	# compute temperature and potential temperature
+	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+
+	# compute acceleration (balance of momentum)
+	apply!(sys, p -> reset_acceleration!(p))
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
+
+	# ==============
+	# Output handling
+	# ==============
+	
+	# initialize simulation output directory with metadata
+	run_dir = initialize_run_directory(sim_params)
+
+	# initialize data accumulation for diagnostics
 	average_velocities, maximum_velocities, energies = initialize_diagnostics_arrays()
-
-	if !isempty(restart_dir)
-		run_dir = validate_restart_dir(restart_dir)
-		ckpt = load_checkpoint(run_dir)
-		if ckpt === nothing
-			error("Restart requested but no checkpoint found in: $run_dir")
-		end
-		restore_particles!(sys, ckpt.particles)
-		k_start = ckpt.k
-		frame_counter = ckpt.frame_counter
-		average_velocities = ckpt.average_velocities
-		maximum_velocities = ckpt.maximum_velocities
-		energies = ckpt.energies
-		println("Resumed from checkpoint: t=$(ckpt.t), step=$k_start")
-	else
-		# ==============
-		# Fresh initialization of the physical fields
-		# ==============
-
-		# initialization of the pressure
-		apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
-
-		# compute temperature and potential temperature
-		apply!(sys, p -> find_temperature!(p, R_mass))
-		apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
-
-		# extrapolate δρ, v to the ghost and mountain particles at the boundaries
-		apply!(sys, p -> reset_ebc_gradients!(p))
-		apply!(sys, (p, q, r) -> compute_ebc_gradients!(p, q, r))
-		apply!(sys, p -> reset_ghost_ebc_search!(p))
-		apply!(sys, (p, q, r) -> search_ghost_extrapolator!(p, q, dr, K))
-		apply!(sys, p -> reset_mountain_ebc_search!(p))
-		apply!(sys, (p, q, r) -> search_mountain_extrapolator!(p, q, r))
-		apply_extrapolation!(sys, ρ0, T_bg, g, R_mass)
-		apply_mountain_freeslip!(sys, h_m, a)
-
-		# compute acceleration (balance of momentum)
-		apply!(sys, p -> reset_acceleration!(p))
-		apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, γ ))
-
-		# initialize simulation output directory with metadata
-		run_dir = initialize_run_directory(sim_params)
-	end
 
 	# ==============
 	# Time loop
 	# ==============
-
+	
 	# use the chosen verlet_step! to advance in time
 	step_function!(sys) = verlet_step!(sys, global_params, sim_params)
 
 	# iterate in time
-	time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys,
-		  average_velocities, maximum_velocities, energies;
-		  k_start=k_start, frame_counter=frame_counter)
+	time_loop(global_params, run_dir, step_function!, t_end, dt, dt_frame, sys, average_velocities, maximum_velocities, energies)
 
 	# create a xdmf file to use with the generated h5 files
 	generate_sph_xdmf(run_dir)

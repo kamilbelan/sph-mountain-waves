@@ -56,9 +56,9 @@ dummy_sim = Dict{Symbol, Any}(
 # ============================================================
 
 formulations = [
-	"EvolWBalancedWCSPH",
-	"EvolWBalancedHopkins",
-	"EvolWBalancedThetaHopkins",
+	"EvolWBSPH",
+	"EvolWBPA",
+	"EvolWBPTH",
 ]
 
 for name in formulations

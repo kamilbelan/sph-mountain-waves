@@ -5,7 +5,7 @@ h(x) = (h_m a²) / (x² + a²),
 
 """
 
-module EvolWBalancedThetaHopkins
+module EvolWBPTH
 
 export run_sim
 

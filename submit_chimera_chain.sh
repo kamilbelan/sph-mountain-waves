@@ -10,7 +10,7 @@
 #   ./submit_chimera_chain.sh 6 experiments/my_exp/global_params.toml experiments/my_exp/sim_params.toml
 #
 #   # Resume an interrupted chain from an existing run directory:
-#   ./submit_chimera_chain.sh 4 experiments/my_exp/global_params.toml experiments/my_exp/sim_params.toml data/sims/EvolWBalancedThetaHopkins/2026-04-13/123456_dr=520/
+#   ./submit_chimera_chain.sh 4 experiments/my_exp/global_params.toml experiments/my_exp/sim_params.toml data/sims/EvolWBPTH/2026-04-13/123456_dr=520/
 #
 # HOW IT WORKS:
 #   Job 1 runs fresh (or resumes from restart_dir if given).

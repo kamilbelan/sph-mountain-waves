@@ -1,12 +1,12 @@
 """
-Static atmosphere above a mountain with the Witch of Agnesi profile:
+ Static atmosphere above a mountain with the Witch of Agnesi profile:
 
-h(x) = (h_m a²) / (x² + a²),
+ h(x) = (h_m a²) / (x² + a²),
 
-all thermodynamic processes are adiabatic
+ all thermodynamic processes are adiabatic
 """
 
-module StaticWBalancedThetaHopkins
+module StaticWBPA
 
 export run_sim
 
@@ -60,12 +60,14 @@ mutable struct Particle <: AbstractParticle
 	Omega::Float64    # ∇h correction factor
 	P_bg::Float64     # background pressure
 	P::Float64        # total pressure
-	θ_bg::Float64     # bakcground potential temperature
+	θ_bg::Float64     # background potential temperature
 	θ′::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
 	type::Float64     # particle type
+        A::Float64        # entropy-like variable
+        A_bg::Float64     # entropy-like variable
 
 	function Particle(x::RealVector, v::RealVector, type::Float64, global_params::Dict, sim_params::Dict)
 		# unpack all parameters
@@ -93,6 +95,8 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
+			0.0,            # A
+                        0.0,            # A_bg
 			type,           # type
 		)
 
@@ -107,9 +111,12 @@ mutable struct Particle <: AbstractParticle
 		obj.P_bg = 0.0 # needs SPH sum!
 		obj.P = 0.0 # needs SPH sum!
 
+		obj.A_bg = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
+		obj.A = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
+
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 		obj.θ′ = 0.0
-		obj.θ = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
+		obj.θ = obj.θ′ + obj.θ_bg
 
 		return obj
 	end
@@ -133,38 +140,50 @@ function background_pot_temperature(y::Float64, ρ0::Float64, T_bg::Float64, g::
 	return T_bg * (((T_bg * R_gas * ρ0) / P_bg))^(2 / 7)
 end
 
+function background_entropy(y::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, γ::Float64)
+	P_bg = background_pressure(y, ρ0, T_bg, g, R_mass)
+	ρ_bg = background_density(y, ρ0, T_bg, g, R_mass)
+	return P_bg / ρ_bg^γ
+end
+
+
 # ==============
 # Pressure computation (e.g followed by sound speed computation)
 # ==============
 
-@inbounds function reset_pressure!(p::Particle, θ_0::Float64)
+@inbounds function reset_pressure!(p::Particle, γ::Float64)
 	ker_self = wendland2(p.h, 0.0)
-	p.P = (p.m / θ_0) * p.θ * ker_self
-	p.P_bg = (p.m / θ_0) * p.θ_bg * ker_self
+        p.P = p.m * p.A^(1 / γ) * ker_self
+        p.P_bg = p.m * p.A_bg^(1 / γ) * ker_self
 end
 
-@inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, θ_0::Float64)
-	ker = wendland2(p.h, r)
-	p.P += (q.m / θ_0) * p.θ * ker
-	p.P_bg += (q.m / θ_0) * p.θ_bg * ker
+@inbounds function compute_pressure!(p::Particle, q::Particle, r::Float64, γ::Float64)
+        ker = wendland2(p.h, r)
+        p.P += q.m * q.A^(1 / γ) * ker
+        p.P_bg += q.m * q.A_bg^(1 / γ) * ker
 end
 
 @inbounds function finalize_pressure!(p::Particle, γ::Float64)
-	p.P = p.P^γ
-	p.P_bg = p.P_bg^γ
+        p.P = p.P^γ
+        p.P_bg = p.P_bg^γ
 end
 
 # ==============
-# Thermodynamics 
+# Thermodynamics (e.g determining temperature and potential temperature)
 # ==============
 
-@inbounds function compute_pot_temperature!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, R_gas::Float64)
-	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+@inbounds function compute_entropy!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, γ::Float64)
+	p.A_bg = background_entropy(p.x[2], ρ0, T_bg, g, R_mass, γ)
 end
 
 @inbounds function find_temperature!(p::Particle, R_mass::Float64)
-	p.T = p.P / (R_mass * p.ρ)
+        p.T = p.P / (R_mass * p.ρ)
+end
+
+@inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
+        p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
+	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
+	p.θ′ = p.θ - p.θ_bg
 end
 
 # ==============
@@ -203,12 +222,12 @@ end
 # Momentum balance
 # ==============
 
-@inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ε::Float64, rho_floor::Float64, P_floor::Float64, θ_0::Float64, γ::Float64)
+@inbounds function balance_of_momentum!(p::Particle, q::Particle, r::Float64, α::Float64, β::Float64, ε::Float64, rho_floor::Float64, P_floor::Float64, γ::Float64)
 	x_pq = p.x - q.x
 	v_pq = p.v - q.v
 	dot_product = SmoothedParticles.dot(x_pq, v_pq)
 
-	prefac = q.m * p.θ * q.θ / θ_0^2
+	prefac = q.m * (p.A * q.A)^(1 / γ)
 	expfac = 1.0 - 2.0 / γ
 	ker_i = rDwendland2(p.h, r)
 	ker_j = rDwendland2(q.h, r)
@@ -220,7 +239,7 @@ end
 	# acceleration due the gradient of total pressure
 	a_tot = -prefac * (f_i * pP^expfac * ker_i + f_j * qP^expfac * ker_j) * x_pq
 
-	prefac_bg = q.m * p.θ_bg * q.θ_bg  / θ_0^2
+	prefac_bg = q.m * (p.A_bg * q.A_bg)^(1 / γ)
 	pP_bg = max(P_floor, p.P_bg)
 	qP_bg = max(P_floor, q.P_bg)
 
@@ -247,7 +266,6 @@ end
 		p.Dv += -q.m * π_ij * ker_ij * x_pq
 	end
 end
-
 
 # ==============
 # Mass balance 
@@ -291,7 +309,7 @@ function move!(p::Particle, dt::Float64)
 	end
 end
 
-function accelerate!(p::Particle, dt::Float64, g::Float64, z_t::Float64, z_β::Float64, γ_r::Float64)
+function accelerate!(p::Particle, dt::Float64, g::Float64, γ::Float64, z_t::Float64, z_β::Float64, γ_r::Float64, P_floor)
 	if p.type == FLUID
 		p.v += 0.5 * dt * (p.Dv + damping_structure(p.x[2], p.v, z_t, z_β, γ_r)) # this is a vector sum
 	end
@@ -313,16 +331,14 @@ function verlet_step!(sys, global_params, sim_params)
 	@unpack rho_floor, P_floor, ϵ, α, β  = sim_params
 	@unpack η, dr, dt_rel, t_end, γ_r_rel = sim_params
 
-	# compute derived parameters
+	# compute derived parameter
 	h0 = η * dr
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	γ_r = γ_r_rel * N
-	P_0 = ρ0 * R_mass * T_bg
-	θ_0 = (P_0^((γ - 1) / γ)) / R_mass
-
+	
 	# half-step acceleration & drift
-	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
+	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
 	apply!(sys, p -> move!(p, dt))
 	create_cell_list!(sys)
 
@@ -332,30 +348,32 @@ function verlet_step!(sys, global_params, sim_params)
 		apply!(sys, p -> reset_number_density!(p))
 		apply!(sys, (p, q, r) -> compute_number_density!(p, q, r))
 		apply!(sys, p -> finalize_number_density!(p))
-
+		
 		# we in fact do not need the last values, since they will be taken into the balance of momentum
 		if iter < max_iter
 			apply!(sys, p -> update_smoothing!(p, η, h0))
 			create_cell_list!(sys)
 		end
 	end
-
+	
 	# compute density and smoothing length
 	apply!(sys, p -> reset_density!(p))
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
-
+	
 	# compute pressure
-	apply!(sys, p -> reset_pressure!(p, θ_0))
-	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
-	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
+	apply!(sys, p -> reset_pressure!(p, γ))
+	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
+	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ))
 
-	# compute temperature 
+	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
+
 	# compute the forces
-	apply!(sys, p -> reset_acceleration!(p))
-	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
-	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
+	apply!(sys, p -> reset_acceleration!)
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ))
+	apply!(sys, p -> accelerate!(p, dt, g, γ, z_t, z_β, γ_r, P_floor))
 end
 
 # ==============
@@ -366,7 +384,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Parameters initialization
 	# ==============
-
+	
 	# unpack all parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, a, z_t = global_params
@@ -379,9 +397,6 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	c = sqrt(65e3 * (γ) / ρ0)
 	dt = dt_rel * h0 / c
 	dt_frame = t_end / 100
-	γ_r = γ_r_rel * N
-	P_0 = ρ0 * R_mass * T_bg
-	θ_0 = (P_0^((γ - 1) / γ)) / R_mass
 
 	# create the particle system
 	sys = make_system(Particle, global_params, sim_params)
@@ -389,7 +404,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Initialization of the physical fields
 	# ==============
-
+	
 	# initialize the number density and the smoothing length
 	max_iter = 3
 	for iter in 1:max_iter
@@ -408,23 +423,23 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	apply!(sys, (p, q, r) -> compute_density!(p, q, r))
 
 	# initialization of the pressure
-	apply!(sys, p -> reset_pressure!(p, θ_0))
-	apply!(sys, p -> compute_pot_temperature!(p, ρ0, T_bg, g, R_mass, R_gas))
-	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, θ_0))
+	apply!(sys, p -> reset_pressure!(p, γ))
+	apply!(sys, p -> compute_entropy!(p, ρ0, T_bg, g, R_mass, γ))
+	apply!(sys, (p, q, r) -> compute_pressure!(p, q, r, γ))
 	apply!(sys, p -> finalize_pressure!(p, γ))
 
-	# compute temperature 
+	# compute temperature and potential temperature
 	apply!(sys, p -> find_temperature!(p, R_mass))
+	apply!(sys, p -> find_pot_temp!(p, ρ0, T_bg, g, R_gas, R_mass))
 
 	# compute acceleration (balance of momentum)
 	apply!(sys, p -> reset_acceleration!(p))
-	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, θ_0, γ))
-	apply!(sys, p -> accelerate!(p, dt, g, z_t, z_β, γ_r))
+	apply!(sys, (p, q, r) -> balance_of_momentum!(p, q, r, α, β, ϵ, rho_floor, P_floor, γ ))
 
 	# ==============
 	# Output handling
 	# ==============
-
+	
 	# initialize simulation output directory with metadata
 	run_dir = initialize_run_directory(sim_params)
 
@@ -434,7 +449,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Time loop
 	# ==============
-
+	
 	# use the chosen verlet_step! to advance in time
 	step_function!(sys) = verlet_step!(sys, global_params, sim_params)
 
@@ -454,4 +469,5 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	return run_dir
 end
 end # module
+
 
