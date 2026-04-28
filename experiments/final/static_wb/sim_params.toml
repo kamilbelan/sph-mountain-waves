@@ -33,7 +33,7 @@ v_initial = [20.0]
 #    EvolWBPA
 #    EvolWBPTH
 
-formulation = ["StaticStandardSPH", "StaticStandardPA", "StaticStandardPTH"]
+formulation = ["StaticWBSPH", "StaticWBPA", "StaticWBPTH"]
 
 
 
