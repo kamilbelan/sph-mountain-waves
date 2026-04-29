@@ -267,7 +267,7 @@ ax = Axis(fig[1, 1];
 )
 
 # Heatmap with color clipping
-hm = heatmap!(ax, x_grid_km, z_grid_km, vnorm_grid;
+hm = heatmap!(ax, interpolate=false, x_grid_km, z_grid_km, vnorm_grid;
     colormap   = CMAP_SEQ,
     colorrange = (0.0, vmax_grid),
 )

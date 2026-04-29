@@ -108,7 +108,7 @@ fig = Figure(size=(1000, 450), fontsize=22)
 ax = Axis(fig[1, 1], xlabel="distance x [km]", ylabel="height z [km]")
 
 # 1. Plot the interpolated fluid field (w)
-hm = heatmap!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
+hm = heatmap!(ax, interpolate=false, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
               colormap=tol_diverging, colorrange=(-wmax, wmax), interpolate=true)
 
 # 2. Scatter the mountain bedrock
