@@ -105,7 +105,7 @@ mutable struct Particle <: AbstractParticle
 		)
 
 		# initialization
-		
+
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
 		obj.ρ′ = 0.0
 		obj.ρ = obj.ρ′ + obj.ρ_bg
@@ -337,11 +337,12 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
+
 	# ==============
 	# Parameters initialization
 	# ==============
-	
+
 	# unpack all parameters
 	@unpack g, R_mass, cp, cv, γ, R_gas, T_bg, ρ0, N = global_params
 	@unpack dom_height, dom_length, a, z_t = global_params
@@ -363,7 +364,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Initialization of the physical fields
 	# ==============
-	
+
 	# initialization of the pressure
 	apply!(sys, p -> compute_pressure!(p, ρ0, T_bg, g, R_mass, P_floor))
 
@@ -378,7 +379,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Output handling
 	# ==============
-	
+
 	# initialize simulation output directory with metadata
 	run_dir = initialize_run_directory(sim_params)
 
@@ -388,7 +389,7 @@ function run_sim(global_params::Dict, sim_params::Dict)
 	# ==============
 	# Time loop
 	# ==============
-	
+
 	# use the chosen verlet_step! to advance in time
 	step_function!(sys) = verlet_step!(sys, global_params, sim_params)
 

@@ -380,7 +380,7 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
 	# ==============
 	# Parameters initialization
 	# ==============
