@@ -33,7 +33,7 @@ Calculate and return the maximal velocity magnitude of all particles in the syst
 """
 
 function max_velocity(sys::ParticleSystem)::Float64
-	v = maximum(SmoothedParticles.norm(p.v) for p in sys.particles if p.type == FLUID)
+	v = maximum(SmoothedParticles.norm(p.v) for p in sys.particles if p.type == FLUID; init=0.0)
 	return v
 end
 

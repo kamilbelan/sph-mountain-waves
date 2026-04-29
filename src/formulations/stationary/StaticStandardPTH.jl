@@ -203,8 +203,10 @@ function damping_structure(z::Float64, v::RealVector, z_t::Float64, z_β::Float6
 	end
 end
 
-# NO BUYOANCY EXPLICITELY!
-#
+function buyoancy_force(p::Particle, g::Float64)
+	return -g * VECY
+end
+
 # ==============
 # Momentum balance
 # ==============

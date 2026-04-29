@@ -111,7 +111,7 @@ function make_system(Particle::Type, global_params::Dict, sim_params::Dict)
 	# passing params to the Particle constructor
 	generate_particles!(sys, grid, domain - mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
 	generate_particles!(sys, grid, fence, x -> Particle(x, VEC0, WALL, global_params, sim_params))
-	generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, FLUID, global_params, sim_params))
+	generate_particles!(sys, grid, mountain, x -> Particle(x, VEC0, MOUNTAIN, global_params, sim_params))
 
 	create_cell_list!(sys)
 	return sys
