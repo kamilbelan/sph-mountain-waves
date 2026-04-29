@@ -56,29 +56,30 @@ h0 = eta * dr
 
 # Load frame
 filepath = joinpath(run_dir, frame_file)
-t_snap, x_f, z_f, vz_f, rho_f, m_approx, x_b, z_b = h5open(filepath, "r") do fid
-    t_raw = read(HDF5.attributes(fid)["time"])
-    t     = t_raw isa AbstractArray ? first(t_raw) : t_raw
+t_snap, x_f, z_f, vz_f, rho_f, m_approx, x_b, z_b, theta_f = h5open(filepath, "r") do fid
     pos   = read(fid["positions"])
     vel   = read(fid["velocities"])
     dens  = read(fid["densities"])
     types = read(fid["types"])
     
+    # NOTE: Change "theta" if your HDF5 key is named differently!
+    theta = read(fid["pot_temperatures"]) 
+    
     mask_fluid = types .== FLUID
-    mask_bnd   = types .!= FLUID  # Extract boundary particles for the mountain
+    mask_bnd   = types .!= FLUID  
     
     rho0 = maximum(dens[mask_fluid])
     
-    (t, 
+    (read(HDF5.attributes(fid)["time"]), 
      pos[1, mask_fluid], pos[2, mask_fluid], 
      vel[2, mask_fluid], dens[mask_fluid], rho0 * dr^2,
-     pos[1, mask_bnd], pos[2, mask_bnd])
+     pos[1, mask_bnd], pos[2, mask_bnd],
+     theta[mask_fluid])
 end
 
 m_f = fill(m_approx, length(x_f))
 
-# Define plotting grid (Crop to see the mountain and the wave clearly)
-# We deliberately stop at z = 14 km to hide the upper boundary/sponge layer noise
+# Define plotting grid 
 x_min, x_max = -50_000.0, 150_000.0  
 z_min, z_max = 0.0, 14_000.0
 x_grid = range(x_min, x_max; length=300)
@@ -87,42 +88,37 @@ z_grid = range(z_min, z_max; length=150)
 println("Interpolating vertical velocity (w)...")
 w_grid = sph_interp_grid(x_f, z_f, h0, m_f, rho_f, vz_f, x_grid, z_grid)
 
-# ── Aesthetic Settings (Ported from analytical script) ────────────────────────
-tol_diverging = cgrad([
-    colorant"#882255",   # Wine
-    colorant"#AA4466",
-    colorant"#CC6677",   # Rose
-    colorant"#E8A5AE",
-    colorant"#FFFFFF",   # White
-    colorant"#B8DCF0",
-    colorant"#88CCEE",   # Cyan
-    colorant"#5577BB",
-    colorant"#332288",   # Indigo
-])
+println("Interpolating potential temperature (theta)...")
+theta_grid = sph_interp_grid(x_f, z_f, h0, m_f, rho_f, theta_f, x_grid, z_grid)
 
-# Widen the color range so the peaks (-0.5 to 0.5) sit in the soft mid-tones
+# ── Aesthetic Settings ────────────────────────
+tol_diverging = cgrad([
+    colorant"#882255", colorant"#AA4466", colorant"#CC6677", colorant"#E8A5AE",
+    colorant"#FFFFFF", colorant"#B8DCF0", colorant"#88CCEE", colorant"#5577BB", colorant"#332288"
+])
 wmax = 0.8 
 
-# Plotting
+# ── Figure ────────────────────────────────────
 fig = Figure(size=(1000, 450), fontsize=22)
-ax = Axis(fig[1, 1], 
-          xlabel="Distance x [km]", 
-          ylabel="Height z [km]", 
 
-# 1. Plot the interpolated fluid field
+# Removed the title!
+ax = Axis(fig[1, 1], xlabel="Distance x [km]", ylabel="Height z [km]")
+
+# 1. Plot the interpolated fluid field (w)
 hm = heatmap!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
               colormap=tol_diverging, colorrange=(-wmax, wmax), interpolate=true)
 
-# 2. Scatter the boundary particles to form the physical mountain
-scatter!(ax, x_b ./ 1e3, z_b ./ 1e3, color=(:gray, 0.8), markersize=4)
+# 2. Scatter the boundary particles (Mountain)
+# Increased markersize and darkened so it fuses into a solid foundation
+scatter!(ax, x_b ./ 1e3, z_b ./ 1e3, color=(:black, 0.7), markersize=8)
 
-# 3. Add subtle contours to highlight the wave shape
-contour!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
-         levels=8, color=:black, alpha=0.25, linewidth=0.8)
+# 3. Add Isentropes (Constant Theta)
+contour!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, theta_grid; 
+         levels=25, color=:black, linewidth=1.2)
 
 # Strict axis limits
 xlims!(ax, x_min/1e3, x_max/1e3)
-ylims!(ax, -1.0, z_max/1e3) # Start slightly below 0 to show the mountain base
+ylims!(ax, -1.0, z_max/1e3) 
 
 Colorbar(fig[1, 2], hm, label="w [m/s]")
 
