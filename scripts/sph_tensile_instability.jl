@@ -71,8 +71,8 @@ ax1 = Axis(fig[1, 1],
 # Increased markersize as requested to make clumping obvious
 scatter!(ax1, x_p ./ 1e3, z_p ./ 1e3, color=(:black, 0.7), markersize=5)
 
-xlims!(ax1, -20.0, 20.0) 
-ylims!(ax1, 0.0, 10.0)
+xlims!(ax1, 0.0, 150.0) 
+ylims!(ax1, 0.0, 26.0)
 
 # -- Right Panel: Log-Scale Velocity Explosion --
 ax2 = Axis(fig[1, 2], 

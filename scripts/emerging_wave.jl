@@ -85,7 +85,7 @@ end
 m_f = fill(m_approx, length(x_f))
 
 # Define plotting grid 
-x_min, x_max = -40_000.0, 100_000.0  
+x_min, x_max = -40_000.0, 50_000.0  
 z_min, z_max = 0.0, 14_000.0
 x_grid = range(x_min, x_max; length=300)
 z_grid = range(z_min, z_max; length=150)
@@ -108,7 +108,7 @@ fig = Figure(size=(1000, 450), fontsize=22)
 ax = Axis(fig[1, 1], xlabel="distance x [km]", ylabel="height z [km]")
 
 # 1. Plot the interpolated fluid field (w)
-hm = heatmap!(ax, interpolate=false, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
+hm = heatmap!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
               colormap=tol_diverging, colorrange=(-wmax, wmax), interpolate=true)
 
 # 2. Scatter the mountain bedrock

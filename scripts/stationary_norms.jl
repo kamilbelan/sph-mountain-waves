@@ -95,12 +95,21 @@ println("Norms ready; building figure...")
 fig = Figure(size=(900, 500), fontsize=20)
 
 ax = Axis(fig[1, 1];
-    xlabel         = "time t[s]",
-    ylabel         = "velocity |v|[m/s]",
-    yscale         = log10,
-    xticklabelsize = 16,
-    yticklabelsize = 16,
-)
+	  xlabel         = "time t[s]",
+	  ylabel         = "velocity |v|[m/s]",
+	  yscale         = log10,
+	  xticklabelsize = 16,
+	  yticklabelsize = 16,
+	  xticks         = 0:10:100,
+	  yticks         = (
+	  [10.0^i for i in -15:5:25], 
+	  [L"10^{%$(i)}" for i in -15:5:25]
+	  )
+	  )
+
+# Add a reference line for Machine Epsilon
+hlines!(ax, [1e-16], color=:black, linestyle=:dot, linewidth=1.5)
+text!(ax, 5, 1.5e-16, text=L"\varepsilon_{\text{mach}}", fontsize=14, color=:black)
 
 lines!(ax, t_std, linf_std_p; color=COL_STD, linestyle=:solid, linewidth=2.0,
        label=L"\mathrm{Standard},\;L^\infty")
