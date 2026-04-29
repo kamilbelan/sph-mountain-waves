@@ -38,6 +38,7 @@ include(srcdir("core", "stationary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("io", "checkpoint.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -57,15 +58,15 @@ mutable struct Particle <: AbstractParticle
 	v::RealVector     # velocity
 	Dv::RealVector    # acceleration
 	ρ_bg::Float64     # background density
-	ρ′::Float64       # density perturbation
+	δρ::Float64       # density perturbation
 	ρ::Float64        # total density
 	Dρ::Float64       # density rate
 	P_bg::Float64     # background pressure
-	P′::Float64       # pressure perturbation
+	δP::Float64       # pressure perturbation
 	P::Float64        # total pressure
 	c::Float64        # local speed of sound
 	θ_bg::Float64     # bakcground potential temperature
-	θ′::Float64       # potential temperature perturbation
+	δθ::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
@@ -89,15 +90,15 @@ mutable struct Particle <: AbstractParticle
 			v,              # v
 			VEC0,           # Dv
 			0.0,            # ρ_bg
-			0.0,            # ρ′
+			0.0,            # δρ
 			0.0,            # ρ
 			0.0,            # Dρ
 			0.0,            # P_bg
-			0.0,            # P′
+			0.0,            # δP
 			0.0,            # P
 			0.0,            # c
 			0.0,            # θ_bg 
-			0.0,            # θ′ 
+			0.0,            # δθ 
 			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
@@ -107,21 +108,21 @@ mutable struct Particle <: AbstractParticle
 		# initialization
 		
 		obj.ρ_bg = background_density(obj.x[2], ρ0, T_bg, g, R_mass)
-		obj.ρ′ = 0.0
-		obj.ρ = obj.ρ′ + obj.ρ_bg
+		obj.δρ = 0.0
+		obj.ρ = obj.δρ + obj.ρ_bg
 		obj.m = ρ0 * dr^2
 
 		obj.T_bg = T_bg
 		obj.T = T_bg
 
 		obj.P_bg = background_pressure(obj.x[2],ρ0, T_bg, g, R_mass)
-		obj.P′ = 0.0
-		obj.P = obj.P′ + obj.P_bg
+		obj.δP = 0.0
+		obj.P = obj.δP + obj.P_bg
 		obj.c = sqrt(γ * obj.P / obj.ρ)
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
-		obj.θ = obj.θ′ + obj.θ_bg
+		obj.δθ = 0.0
+		obj.θ = obj.δθ + obj.θ_bg
 
 		return obj
 	end
@@ -152,8 +153,8 @@ end
 
 @inbounds function compute_pressure!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64, P_floor)
 	p.P_bg = background_pressure(p.x[2], ρ0, T_bg, g, R_mass)
-	p.P′ = p.c^2 * p.ρ′
-	pP = p.P_bg + p.P′
+	p.δP = p.c^2 * p.δρ
+	pP = p.P_bg + p.δP
 	p.P = max(pP, P_floor)
 end
 
@@ -169,7 +170,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
 	p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 
@@ -258,7 +259,7 @@ end
 @inbounds function compute_density!(p::Particle, dt::Float64, ρ0::Float64, T_bg::Float64, g::Float64, R_mass::Float64)
 	p.ρ += p.Dρ * dt
 	p.ρ_bg = background_density(p.x[2], ρ0, T_bg, g, R_mass)
-	p.ρ′ = p.ρ - p.ρ_bg
+	p.δρ = p.ρ - p.ρ_bg
 end
 
 @inbounds function reset_density_rate!(p::Particle)
@@ -337,7 +338,7 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
 	# ==============
 	# Parameters initialization
 	# ==============

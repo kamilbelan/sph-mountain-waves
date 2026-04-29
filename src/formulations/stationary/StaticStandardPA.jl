@@ -38,6 +38,7 @@ include(srcdir("core", "stationary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("io", "checkpoint.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -61,7 +62,7 @@ mutable struct Particle <: AbstractParticle
 	P::Float64        # total pressure
 	c::Float64        # local speed of sound
 	θ_bg::Float64     # bakcground potential temperature
-	θ′::Float64       # potential temperature perturbation
+	δθ::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
@@ -79,21 +80,23 @@ mutable struct Particle <: AbstractParticle
 		# Derived values within the constructor
 		h0 = η * dr
 		obj = new(
-			h0,             # h 
-			x,              # x 	 	
+			h0,             # h
+			x,              # x
 			0.0,            # m
 			v,              # v
 			VEC0,           # Dv
 			0.0,            # ρ
 			0.0,            # n
-			0.0,            # Omega 
+			0.0,            # Omega
 			0.0,            # P
-			0.0,            # θ_bg 
-			0.0,            # θ′ 
-			0.0,            # θ 
+			0.0,            # c
+			0.0,            # θ_bg
+			0.0,            # δθ
+			0.0,            # θ
 			0.0,            # T_bg
 			0.0,            # T
 			type,           # type
+			0.0,            # A
 		)
 		# initialization
 
@@ -108,7 +111,7 @@ mutable struct Particle <: AbstractParticle
 		obj.A = obj.P / obj.ρ^γ
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
+		obj.δθ = 0.0
 		obj.θ = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
 
 		return obj
@@ -168,7 +171,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
 	p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 # ==============
@@ -358,7 +361,7 @@ end
 # Main Entry Point
 # ==============
 
-function run_sim(global_params::Dict, sim_params::Dict)
+function run_sim(global_params::Dict, sim_params::Dict; restart_dir::String="")
 	# ==============
 	# Parameters initialization
 	# ==============

@@ -38,6 +38,7 @@ include(srcdir("core", "stationary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
+include(srcdir("io", "checkpoint.jl"))
 
 # ==============
 # INCLUDE UTILS SCRIPTS
@@ -61,7 +62,7 @@ mutable struct Particle <: AbstractParticle
 	P_bg::Float64     # background pressure
 	P::Float64        # total pressure
 	θ_bg::Float64     # background potential temperature
-	θ′::Float64       # potential temperature perturbation
+	δθ::Float64       # potential temperature perturbation
 	θ::Float64        # total potential temperature
 	T_bg::Float64     # background temperature
 	T::Float64        # total temperature
@@ -91,13 +92,13 @@ mutable struct Particle <: AbstractParticle
 			0.0,            # P_bg
 			0.0,            # P
 			0.0,            # θ_bg 
-			0.0,            # θ′ 
+			0.0,            # δθ 
 			0.0,            # θ 
 			0.0,            # T_bg
 			0.0,            # T
+			type,           # type
 			0.0,            # A
                         0.0,            # A_bg
-			type,           # type
 		)
 
 		# initialization
@@ -115,8 +116,8 @@ mutable struct Particle <: AbstractParticle
 		obj.A = background_entropy(obj.x[2],ρ0, T_bg, g, R_mass, γ)
 
 		obj.θ_bg = background_pot_temperature(obj.x[2],ρ0, T_bg, g, R_mass, R_gas)
-		obj.θ′ = 0.0
-		obj.θ = obj.θ′ + obj.θ_bg
+		obj.δθ = 0.0
+		obj.θ = obj.δθ + obj.θ_bg
 
 		return obj
 	end
@@ -183,7 +184,7 @@ end
 @inbounds function find_pot_temp!(p::Particle, ρ0::Float64, T_bg::Float64, g::Float64, R_gas::Float64, R_mass::Float64)
         p.θ = p.T * (((T_bg * R_gas * ρ0) / p.P))^(2 / 7)
 	p.θ_bg = background_pot_temperature(p.x[2], ρ0, T_bg, g, R_mass, R_gas)
-	p.θ′ = p.θ - p.θ_bg
+	p.δθ = p.θ - p.θ_bg
 end
 
 # ==============

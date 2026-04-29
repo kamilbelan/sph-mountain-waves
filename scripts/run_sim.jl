@@ -146,10 +146,13 @@ for model_name in model_list
 	println("\n\n" * "="^60)
 	println("=== LOADING MODEL: $model_name")
 	println("="^60)
-	# routing to the model source code
-	model_path = srcdir("formulations", "stationary", "$(model_name).jl")
+	# routing to the model source code (try evolutionary first, then stationary)
+	model_path = srcdir("formulations", "evolutionary", "$(model_name).jl")
 	if !isfile(model_path)
-		println("     Warning: Model file '$model_path' not found.")
+		model_path = srcdir("formulations", "stationary", "$(model_name).jl")
+	end
+	if !isfile(model_path)
+		println("     Warning: Model file not found in evolutionary/ or stationary/.")
 		exit(1)
 	end
 
