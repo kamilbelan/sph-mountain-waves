@@ -5,6 +5,7 @@ using Colors
 using Printf
 
 const FLUID = 0.0
+const MOUNTAIN = 1.0 
 
 # ── 2-D Wendland C² kernel ────────────────────────────────────────────────────
 @inline function wendland2(h::Float64, r::Float64)::Float64
@@ -45,9 +46,15 @@ function sph_interp_grid(xp, zp, h0, mp, rhop, fp, x_grid, z_grid)
     return out
 end
 
-length(ARGS) >= 2 || error("Usage: julia plot_emerging_wave.jl <run_dir> <frame_file.h5>")
-run_dir = ARGS[1]
-frame_file = ARGS[2]
+# ── Updated Argument Parsing ──────────────────────────────────────────────────
+# Usage: julia plot_emerging_wave.jl <run_dir> <frame_file.h5> <formulation>
+length(ARGS) >= 3 || error("Usage: julia plot_emerging_wave.jl <run_dir> <frame_file.h5> <formulation>")
+run_dir     = ARGS[1]
+frame_file  = ARGS[2]
+formulation = ARGS[3] # SPH or PTH
+
+# Extract frame number from filename (e.g., "frame_0100.h5" -> "0100")
+frame_num = replace(basename(frame_file), r"frame_(\d+)\.h5" => s"\1")
 
 # Load metadata
 meta = load(joinpath(run_dir, "metadata.jld2"))
@@ -61,12 +68,10 @@ t_snap, x_f, z_f, vz_f, rho_f, m_approx, x_b, z_b, theta_f = h5open(filepath, "r
     vel   = read(fid["velocities"])
     dens  = read(fid["densities"])
     types = read(fid["types"])
-    
-    # NOTE: Change "theta" if your HDF5 key is named differently!
     theta = read(fid["pot_temperatures"]) 
     
     mask_fluid = types .== FLUID
-    mask_bnd   = types .!= FLUID  
+    mask_bnd   = types .== MOUNTAIN  
     
     rho0 = maximum(dens[mask_fluid])
     
@@ -80,7 +85,7 @@ end
 m_f = fill(m_approx, length(x_f))
 
 # Define plotting grid 
-x_min, x_max = -50_000.0, 150_000.0  
+x_min, x_max = -40_000.0, 100_000.0  
 z_min, z_max = 0.0, 14_000.0
 x_grid = range(x_min, x_max; length=300)
 z_grid = range(z_min, z_max; length=150)
@@ -100,28 +105,30 @@ wmax = 0.8
 
 # ── Figure ────────────────────────────────────
 fig = Figure(size=(1000, 450), fontsize=22)
-
-# Removed the title!
-ax = Axis(fig[1, 1], xlabel="Distance x [km]", ylabel="Height z [km]")
+ax = Axis(fig[1, 1], xlabel="distance x [km]", ylabel="height z [km]")
 
 # 1. Plot the interpolated fluid field (w)
 hm = heatmap!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, w_grid; 
               colormap=tol_diverging, colorrange=(-wmax, wmax), interpolate=true)
 
-# 2. Scatter the boundary particles (Mountain)
-# Increased markersize and darkened so it fuses into a solid foundation
-scatter!(ax, x_b ./ 1e3, z_b ./ 1e3, color=(:black, 0.7), markersize=8)
+# 2. Scatter the mountain bedrock
+scatter!(ax, x_b ./ 1e3, z_b ./ 1e3, color=(:darkgray, 1.0), markersize=4.5)
 
 # 3. Add Isentropes (Constant Theta)
 contour!(ax, collect(x_grid)./1e3, collect(z_grid)./1e3, theta_grid; 
-         levels=25, color=:black, linewidth=1.2)
+         levels=25, color=(:black, 0.5), linewidth=0.8)
 
-# Strict axis limits
 xlims!(ax, x_min/1e3, x_max/1e3)
-ylims!(ax, -1.0, z_max/1e3) 
+ylims!(ax, -0.4, z_max/1e3) 
 
 Colorbar(fig[1, 2], hm, label="w [m/s]")
 
-mkpath("figures/evolutionary")
-save("figures/evolutionary/emerging_wave.pdf", fig)
-println("Saved -> figures/evolutionary/emerging_wave.pdf")
+# ── Updated Save Logic ────────────────────────────────────────────────────────
+out_dir = "figures/evolutionary"
+mkpath(out_dir)
+
+# Filename pattern: wave_FORMULATION_FRAME.pdf
+out_filename = "wave_$(formulation)_$(frame_num).pdf"
+save(joinpath(out_dir, out_filename), fig)
+
+println("Saved -> $(joinpath(out_dir, out_filename))")

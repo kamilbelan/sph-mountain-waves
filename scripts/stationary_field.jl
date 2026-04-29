@@ -256,11 +256,11 @@ println(@sprintf("  Arrow scale: %.3g km/(m/s)  (v_max for arrows = %.4g m/s)",
 t_label = @sprintf("%.4g", t_snap)
 
 # Adjusted figure size for the ~4:1 cropped aspect ratio
-fig = Figure(size=(1000, 350), fontsize=18)
+fig = Figure(size=(1000, 350), fontsize=20)
 
 ax = Axis(fig[1, 1];
-    xlabel         = L"x\;[\mathrm{km}]",
-    ylabel         = L"z\;[\mathrm{km}]",
+    xlabel         = "distance x[km]",
+    ylabel         = "height z[km]",
     xticklabelsize = 16,
     yticklabelsize = 16,
     aspect         = DataAspect(), 
@@ -273,7 +273,7 @@ hm = heatmap!(ax, x_grid_km, z_grid_km, vnorm_grid;
 )
 
 Colorbar(fig[1, 2], hm;
-    label         = L"|v|\;[\mathrm{m\,s^{-1}}]",
+    label         = "velocity |v|[m/s]",
     labelsize     = 18,
     ticklabelsize = 16,
     width         = 15,

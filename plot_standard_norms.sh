@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VARIANTS=("SPH" "PA" "PTH")
+VARIANTS=("SPH" "PTH")
 BASE_DIR="data/final/stationary"
 
 echo "Starting automated L_inf / L_2 norm plotting..."

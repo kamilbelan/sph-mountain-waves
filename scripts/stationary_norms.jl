@@ -92,11 +92,11 @@ l2_wb_p    = clamp_fl(l2_wb)
 println("Norms ready; building figure...")
 
 # ── figure ────────────────────────────────────────────────────────────────────
-fig = Figure(size=(900, 500), fontsize=18)
+fig = Figure(size=(900, 500), fontsize=20)
 
 ax = Axis(fig[1, 1];
-    xlabel         = L"t\;[\mathrm{s}]",
-    ylabel         = L"|v|\;[\mathrm{m\,s^{-1}}]",
+    xlabel         = "time t[s]",
+    ylabel         = "velocity |v|[m/s]",
     yscale         = log10,
     xticklabelsize = 16,
     yticklabelsize = 16,
@@ -112,7 +112,7 @@ lines!(ax, t_wb,  l2_wb_p;    color=COL_WB,  linestyle=:dash,  linewidth=2.0,
        label=L"\mathrm{WB},\;L^2\;\mathrm{(RMS)}")
 
 # Legend: upper-left avoids the growing Standard lines.
-axislegend(ax; position=:lt, labelsize=16, framevisible=true)
+axislegend(ax; position=:rb, labelsize=16, framevisible=true)
 
 # ── save ──────────────────────────────────────────────────────────────────────
 outdir = normpath(joinpath(@__DIR__, "..", "figures", "stationary"))
