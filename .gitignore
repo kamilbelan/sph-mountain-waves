@@ -12,8 +12,13 @@
 # custom sysimages
 *.so
 
+# plots and figures
+figures/*
+plots/*
+
 # unwanted data
 *.csv
+data/sims/*
 
 # logs 
 *.log
