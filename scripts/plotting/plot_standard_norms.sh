@@ -1,7 +1,8 @@
 #!/bin/bash
 
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VARIANTS=("SPH" "PTH")
-BASE_DIR="data/final/stationary"
+BASE_DIR="$REPO_ROOT/data/final/stationary"
 
 echo "Starting automated L_inf / L_2 norm plotting..."
 echo "==============================================="
@@ -13,7 +14,7 @@ for var in "${VARIANTS[@]}"; do
     
     if [ -d "$STD_DIR" ] && [ -d "$WB_DIR" ]; then
         echo "Processing formulation: $var"
-        julia -t 4 --project=. scripts/stationary_norms.jl "$STD_DIR" "$WB_DIR" "$OUT_NAME"
+        julia -t 4 --project="$REPO_ROOT" "$REPO_ROOT/scripts/plotting/stationary_norms.jl" "$STD_DIR" "$WB_DIR" "$OUT_NAME"
         echo "-----------------------------------------------"
     else
         echo "Warning: Missing directories for $var. Skipping."

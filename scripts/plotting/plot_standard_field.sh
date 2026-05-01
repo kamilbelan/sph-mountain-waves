@@ -1,7 +1,8 @@
 #!/bin/bash
 
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # Target the standard directory specifically
-TARGET_DIR="data/final/stationary/standard"
+TARGET_DIR="$REPO_ROOT/data/final/stationary/standard"
 
 echo "Starting automated plotting for Standard schemes..."
 echo "==================================================="
@@ -21,7 +22,7 @@ for run_dir in "$TARGET_DIR"/*; do
         echo "Output: $out_name"
         
         # Run the Julia script
-        julia -t 4 --project=. scripts/stationary_field.jl "$run_dir" "$out_name"
+        julia -t 4 --project="$REPO_ROOT" "$REPO_ROOT/scripts/plotting/stationary_field.jl" "$run_dir" "$out_name"
         
         echo "---------------------------------------------------"
     fi

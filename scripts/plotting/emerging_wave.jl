@@ -130,7 +130,7 @@ out_dir = plotsdir("evolutionary")
 mkpath(out_dir)
 
 # Filename pattern: wave_FORMULATION_FRAME.pdf
-out_filename = "wave_$(formulation)_$(frame_num).pdf"
-save(joinpath(out_dir, out_filename), fig)
+out_filename = "wave_$(formulation)_$(frame_num).png"
+save(joinpath(out_dir, out_filename), fig; px_per_unit = 3)
 
 println("Saved -> $(joinpath(out_dir, out_filename))")

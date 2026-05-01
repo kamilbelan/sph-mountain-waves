@@ -91,9 +91,9 @@ axislegend(ax2; position=:lt, framevisible=false)
 out_dir = plotsdir("evolutionary")
 mkpath(out_dir)
 
-# Pattern: crash_FORMULATION_FRAME.pdf
-out_filename = "crash_$(formulation)_$(frame_num).pdf"
+# Pattern: crash_FORMULATION_FRAME.png
+out_filename = "crash_$(formulation)_$(frame_num).png"
 out_path = joinpath(out_dir, out_filename)
 
-save(out_path, fig)
+save(out_path, fig; px_per_unit = 3)
 println("Analysis complete. Plot saved to: $out_path")

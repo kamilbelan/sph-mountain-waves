@@ -298,6 +298,6 @@ arrows2d!(ax,
 outdir = plotsdir("stationary")
 mkpath(outdir)
 
-save(joinpath(outdir, "$(out_prefix).pdf"), fig)
+# save(joinpath(outdir, "$(out_prefix).pdf"), fig) BREAKS PDFA!!!
 save(joinpath(outdir, "$(out_prefix).png"), fig; px_per_unit=3)
-println("Saved → $(abspath(outdir))/$(out_prefix).{pdf,png}")
+println("Saved → $(abspath(outdir))/$(out_prefix).png")
