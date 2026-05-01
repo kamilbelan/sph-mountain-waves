@@ -13,13 +13,14 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # accept both "experiments/foo" and just "foo"
 input="${1%/}"
-if [[ -d "$SCRIPT_DIR/experiments/$input" ]]; then
-    exp_dir="$SCRIPT_DIR/experiments/$input"
-elif [[ -d "$SCRIPT_DIR/$input" ]]; then
-    exp_dir="$SCRIPT_DIR/$input"
+if [[ -d "$PROJECT_ROOT/experiments/$input" ]]; then
+    exp_dir="$PROJECT_ROOT/experiments/$input"
+elif [[ -d "$PROJECT_ROOT/$input" ]]; then
+    exp_dir="$PROJECT_ROOT/$input"
 else
     echo "Error: Experiment directory not found: $input"
     exit 1
@@ -41,11 +42,11 @@ else
     echo "No .sh in experiment dir, falling back to: $SUBMIT_SH"
 fi
 
-cd "$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
 
 # convert to relative paths for SLURM
-global_rel="${exp_dir#$SCRIPT_DIR/}/global_params.toml"
-sim_rel="${exp_dir#$SCRIPT_DIR/}/sim_params.toml"
+global_rel="${exp_dir#$PROJECT_ROOT/}/global_params.toml"
+sim_rel="${exp_dir#$PROJECT_ROOT/}/sim_params.toml"
 
 echo "Submitting: sbatch $SUBMIT_SH $global_rel $sim_rel"
 sbatch "$SUBMIT_SH" "$global_rel" "$sim_rel"

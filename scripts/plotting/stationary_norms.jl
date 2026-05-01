@@ -6,10 +6,12 @@
 # diagnostic CSVs.  Only FLUID particles (type == 0.0) are included.
 #
 # Usage:
-#   julia --project=. scripts/stationary_norms.jl <std_run_dir> <wb_run_dir> [out_prefix]
+#   julia --project=@. scripts/plotting/stationary_norms.jl <std_run_dir> <wb_run_dir> [out_prefix]
 #
-# Output: figures/stationary/<out_prefix>.{pdf,png}
+# Output: plots/stationary/<out_prefix>.{pdf,png}
 
+using DrWatson
+@quickactivate "SPH"
 using HDF5
 using CairoMakie
 using LaTeXStrings
@@ -61,7 +63,7 @@ end
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 length(ARGS) >= 2 ||
-    error("Usage: julia --project=. scripts/stationary_norms.jl <std_dir> <wb_dir> [out_prefix]")
+    error("Usage: julia --project=@. scripts/plotting/stationary_norms.jl <std_dir> <wb_dir> [out_prefix]")
 
 std_dir = ARGS[1]
 wb_dir  = ARGS[2]
@@ -124,7 +126,7 @@ lines!(ax, t_wb,  l2_wb_p;    color=COL_WB,  linestyle=:dash,  linewidth=2.0,
 axislegend(ax; position=:rb, labelsize=16, framevisible=true)
 
 # ── save ──────────────────────────────────────────────────────────────────────
-outdir = normpath(joinpath(@__DIR__, "..", "figures", "stationary"))
+outdir = plotsdir("stationary")
 mkpath(outdir)
 
 save(joinpath(outdir, "$(out_prefix).pdf"), fig)

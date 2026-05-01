@@ -1,3 +1,5 @@
+using DrWatson
+@quickactivate "SPH"
 using HDF5
 using JLD2
 using CairoMakie
@@ -86,7 +88,7 @@ vlines!(ax2, [t_crash], color=:black, linestyle=:dash, label="snapshot")
 axislegend(ax2; position=:lt, framevisible=false)
 
 # ── Save Logic ────────────────────────────────────────────────────────────────
-out_dir = "figures/evolutionary"
+out_dir = plotsdir("evolutionary")
 mkpath(out_dir)
 
 # Pattern: crash_FORMULATION_FRAME.pdf

@@ -9,6 +9,6 @@ for XX in "${FRAMES[@]}"; do
     echo "------------------------------------------------"
     echo "Processing PTH: $FRAME_FILE"
     
-    julia -t 4 --project=. scripts/pth_tensile_instability.jl \
+    julia -t 4 --project=@. scripts/plotting/pth_tensile_instability.jl \
         data/final/evolutionary/PTH/ "$FRAME_FILE" PTH
 done

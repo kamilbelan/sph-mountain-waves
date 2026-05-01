@@ -10,6 +10,6 @@ for XX in "${FRAMES[@]}"; do
     echo "------------------------------------------------"
     echo "Processing SPH: $FRAME_FILE"
     
-    julia -t 4 --project=. scripts/sph_tensile_instability.jl \
+    julia -t 4 --project=@. scripts/plotting/sph_tensile_instability.jl \
         data/final/evolutionary/SPH/ "$FRAME_FILE" SPH
 done

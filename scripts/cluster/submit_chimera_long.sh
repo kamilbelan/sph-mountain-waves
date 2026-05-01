@@ -1,8 +1,8 @@
 #!/bin/bash -l
-#SBATCH --job-name=SPH_med
-#SBATCH --output=logs/SPH_med_-%j.out
-#SBATCH --error=logs/SPH_med-%j.err
-#SBATCH --partition=ffa
+#SBATCH --job-name=SPH_long
+#SBATCH --output=logs/SPH_long_-%j.out
+#SBATCH --error=logs/SPH_long-%j.err
+#SBATCH --partition=ffa-preempt
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=slurm@kamilbelan.anonaddy.com
 
@@ -10,7 +10,8 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --threads-per-core=1
 #SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --time=36:00:00
+#SBATCH --signal=SIGTERM@60
 
 set -euo pipefail
 
@@ -45,17 +46,6 @@ echo "   Sweep Config:  $SIM_CONF"
 echo "   Git commit:    $(git rev-parse --short HEAD)"
 
 # ==============================================================================
-# CHAIN RESTART SUPPORT
-# ==============================================================================
-# When running as part of a chain (submit_chimera_chain.sh), CHAIN_FILE points
-# to a shared temp file containing the restart directory.
-# Job 1 writes the run_dir there; jobs 2+ read it as RESTART_DIR.
-
-if [ -n "${CHAIN_FILE:-}" ] && [ -f "$CHAIN_FILE" ]; then
-    RESTART_DIR=$(cat "$CHAIN_FILE")
-fi
-
-# ==============================================================================
 # ENVIRONMENT SETUP
 # ==============================================================================
 
@@ -81,9 +71,9 @@ mkdir -p logs
 # if RESTART_DIR is set (by job chaining), pass it as a third argument
 if [ -n "${RESTART_DIR:-}" ]; then
     echo "   Restart Dir:   $RESTART_DIR"
-    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF" "$RESTART_DIR"
+    $JULIA_BIN --sysimage=sph_chimera.so --project=@. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF" "$RESTART_DIR"
 else
-    $JULIA_BIN --sysimage=sph_chimera.so --project=. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
+    $JULIA_BIN --sysimage=sph_chimera.so --project=@. scripts/run_sim.jl "$GLOBAL_CONF" "$SIM_CONF"
 fi
 
 echo "=== JOB END $(date) ==="

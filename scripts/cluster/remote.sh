@@ -5,7 +5,8 @@ set -euo pipefail
 REMOTE_HOST="chimera"
 REMOTE_PATH="/home/belank/work/projects/sph-mountain-waves"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MOUNT_POINT="$SCRIPT_DIR/remote"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MOUNT_POINT="$PROJECT_ROOT/remote"
 
   # colors
   GREEN='\033[0;32m'
@@ -64,7 +65,7 @@ do_sync() {
 
       local src="$REMOTE_HOST:$REMOTE_PATH/data/sims/$dir/"
       if [[ -z "$dst" ]]; then
-          dst="$SCRIPT_DIR/data/sims/$dir/"
+          dst="$PROJECT_ROOT/data/sims/$dir/"
       else
           dst="${dst/#\~/$HOME}"
       fi

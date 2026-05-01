@@ -41,12 +41,13 @@ SIM_CONF=$3
 RESTART_DIR="${4:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SUBMIT_SCRIPT="$SCRIPT_DIR/submit_chimera.sh"
 
 # shared file where job 1 writes the run_dir for subsequent jobs to pick up
 # must be on a shared filesystem (not /tmp, which is node-local)
-mkdir -p "$SCRIPT_DIR/logs"
-CHAIN_FILE="$SCRIPT_DIR/logs/chain_$(date +%Y%m%d_%H%M%S)_$$.txt"
+mkdir -p "$PROJECT_ROOT/logs"
+CHAIN_FILE="$PROJECT_ROOT/logs/chain_$(date +%Y%m%d_%H%M%S)_$$.txt"
 echo "$RESTART_DIR" > "$CHAIN_FILE"
 
 echo "=== Submitting chain of $N_JOBS jobs ==="

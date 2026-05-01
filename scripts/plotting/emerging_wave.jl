@@ -1,3 +1,5 @@
+using DrWatson
+@quickactivate "SPH"
 using HDF5
 using JLD2
 using CairoMakie
@@ -124,7 +126,7 @@ ylims!(ax, -0.4, z_max/1e3)
 Colorbar(fig[1, 2], hm, label="w [m/s]")
 
 # ── Updated Save Logic ────────────────────────────────────────────────────────
-out_dir = "figures/evolutionary"
+out_dir = plotsdir("evolutionary")
 mkpath(out_dir)
 
 # Filename pattern: wave_FORMULATION_FRAME.pdf

@@ -6,10 +6,12 @@
 # identically zero in the well-balanced formulation.
 #
 # Usage:
-#   julia --project=. scripts/stationary_field.jl <std_run_dir> [out_prefix]
+#   julia --project=@. scripts/plotting/stationary_field.jl <std_run_dir> [out_prefix]
 #
-# Output: figures/stationary/<out_prefix>.{pdf,png}
+# Output: plots/stationary/<out_prefix>.{pdf,png}
 
+using DrWatson
+@quickactivate "SPH"
 using HDF5
 using JLD2
 using CairoMakie
@@ -137,7 +139,7 @@ end
 
 # ── argument parsing ──────────────────────────────────────────────────────────
 length(ARGS) >= 1 ||
-    error("Usage: julia --project=. scripts/stationary_field.jl <run_dir> [out_prefix]")
+    error("Usage: julia --project=@. scripts/plotting/stationary_field.jl <run_dir> [out_prefix]")
 
 std_dir = ARGS[1]
 
@@ -293,7 +295,7 @@ arrows2d!(ax,
 )
 
 # ── save ──────────────────────────────────────────────────────────────────────
-outdir = normpath(joinpath(@__DIR__, "..", "figures", "stationary"))
+outdir = plotsdir("stationary")
 mkpath(outdir)
 
 save(joinpath(outdir, "$(out_prefix).pdf"), fig)
