@@ -53,5 +53,10 @@ logs/*
 # ignore remote files
 remote/*
 
+# direnv and flake files
+.julia-depot/
+.direnv/
+flake.lock
+
 # chimera jupyter stuff
 .ipynb_checkpoints/*
