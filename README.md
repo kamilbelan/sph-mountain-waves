@@ -1,5 +1,7 @@
 # SPH
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21246806.svg)](https://doi.org/10.5281/zenodo.21246806)
+
 This code base is using the [Julia Language](https://julialang.org/) and
 [DrWatson](https://juliadynamics.github.io/DrWatson.jl/stable/)
 to make a reproducible scientific project named
@@ -67,7 +69,7 @@ original MIT license (Ondřej Kincl) in `lib/SmoothedParticles/9tnSQ/LICENSE`.
 ## Citation
 
 If you use this code, please cite it — see [CITATION.cff](CITATION.cff)
-(or use GitHub's "Cite this repository" button). Once archived on Zenodo,
-this section should be updated with the DOI badge.
+(or use GitHub's "Cite this repository" button). Archived on Zenodo at
+[10.5281/zenodo.21246806](https://doi.org/10.5281/zenodo.21246806).
 
 
