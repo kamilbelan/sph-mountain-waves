@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: >-
+  SPH: a Smoothed Particle Hydrodynamics simulation of
+  atmospheric mountain waves
+message: Please cite this software using these metadata.
+type: software
+authors:
+  - given-names: Kamil
+    family-names: Belan
+    affiliation: Charles University, Faculty of Mathematics and Physics
+license: MIT
+repository-code: 'https://github.com/kamilbelan/sph-mountain-waves'
+keywords:
+  - smoothed particle hydrodynamics
+  - atmospheric mountain waves
+  - well-balanced schemes
+  - Julia
+references:
+  - type: software
+    title: SmoothedParticles.jl
+    authors:
+      - given-names: Ondřej
+        family-names: Kincl
+        affiliation: Charles University
+        orcid: 'https://orcid.org/0000-0001-8335-133X'
+      - given-names: Michal
+        family-names: Pavelka
+        affiliation: Charles University
+        orcid: 'https://orcid.org/0000-0003-0605-6737'
+    repository-code: 'https://github.com/OndrejKincl/SmoothedParticles.jl'
+    license: MIT

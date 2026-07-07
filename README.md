@@ -50,5 +50,24 @@ julia> include(scriptsdir("run_sim.jl"))
 
 The data produced by the scripts can be found in the `data` directory. A separate folder is created for each run.
 
+## Acknowledgements
+
+The SPH backend (`lib/SmoothedParticles/9tnSQ/`) is a fork of
+[SmoothedParticles.jl](https://github.com/OndrejKincl/SmoothedParticles.jl)
+by Ondřej Kincl and Michal Pavelka (Charles University), vendored here as a
+local development version. See `lib/SmoothedParticles/9tnSQ/LICENSE` for its
+license terms.
+
+## License
+
+This project's own code is released under the MIT License — see
+[LICENSE](LICENSE). The vendored SmoothedParticles.jl fork retains its
+original MIT license (Ondřej Kincl) in `lib/SmoothedParticles/9tnSQ/LICENSE`.
+
+## Citation
+
+If you use this code, please cite it — see [CITATION.cff](CITATION.cff)
+(or use GitHub's "Cite this repository" button). Once archived on Zenodo,
+this section should be updated with the DOI badge.
 
 
