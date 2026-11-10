@@ -221,7 +221,11 @@ dom_hgt_km = (z_max_d - z_min_d) / 1e3
 # Colour range: capped slightly higher so the gradient is smooth
 valid_vals = filter(!isnan, vec(vnorm_grid))
 max_val    = isempty(valid_vals) ? 0.0 : Float64(maximum(valid_vals))
-vmax_grid  = min(max(1e-6, max_val), 80.0) # <--- Raised cap to 80 m/s
+# Cap 125 m/s: the selected frame peaks at ~124 m/s (the last frame below
+# 0.5c), so an 80 m/s cap saturated the core of the spurious circulation —
+# exactly the structure the figure exists to show — and made the colourbar
+# understate the peak.
+vmax_grid  = min(max(1e-6, max_val), 125.0)
 
 # ── velocity arrows on a coarse spatial grid ──────────────────────────────────
 N_arrows_z = max(2, round(Int, N_ARROWS_X * dom_hgt_km / dom_len_km))

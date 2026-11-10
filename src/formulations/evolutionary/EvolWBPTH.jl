@@ -151,7 +151,7 @@ function background_pot_temperature(y::Float64, ρ0::Float64, T_bg::Float64, g::
 end
 
 # ==============
-# Pressure computation (e.g followed by sound speed computation)
+# Pressure computation 
 # ==============
 
 @inbounds function reset_pressure!(p::Particle, θ_0::Float64)
