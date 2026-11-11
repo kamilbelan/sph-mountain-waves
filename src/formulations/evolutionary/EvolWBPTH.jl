@@ -28,7 +28,7 @@ using LinearAlgebra
 # INCLUDE CORE SCRIPTS
 # ==============
 
-include(srcdir("core", "evolutionary_domain.jl"))
+include(srcdir("core", "domains", "evolutionary_domain.jl"))
 include(srcdir("core", "diagnostics.jl"))
 include(srcdir("core", "time_loop.jl"))
 include(srcdir("io", "data_storage.jl"))
